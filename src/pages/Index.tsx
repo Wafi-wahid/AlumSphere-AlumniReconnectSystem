@@ -5,7 +5,6 @@ import { Header } from "@/components/layout/Header";
 import { Navigation } from "@/components/layout/Navigation";
 import { HomePage } from "@/components/dashboard/HomePage";
 import { AlumniDirectory } from "@/components/directory/AlumniDirectory";
-import { CareersPage } from "@/components/careers/CareersPage";
 
 const Index = () => {
   const [user, setUser] = useState(null);
@@ -46,7 +45,12 @@ const Index = () => {
           </div>
         );
       case "careers":
-        return <CareersPage />;
+        return (
+          <div className="space-y-6">
+            <h1 className="text-3xl font-bold">Career Opportunities</h1>
+            <p className="text-muted-foreground">Browse jobs and referrals (Coming soon)</p>
+          </div>
+        );
       case "events":
         return (
           <div className="space-y-6">
