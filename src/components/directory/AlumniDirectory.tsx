@@ -205,9 +205,9 @@ const mockAlumni = [
 export function AlumniDirectory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState({
-    year: "",
-    department: "",
-    location: "",
+    year: "all",
+    department: "all",
+    location: "all",
     mentorAvailable: false
   });
 
@@ -216,9 +216,9 @@ export function AlumniDirectory() {
                          alumni.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          alumni.skills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
     
-    const matchesYear = !filters.year || alumni.graduationYear.toString() === filters.year;
-    const matchesDepartment = !filters.department || alumni.department === filters.department;
-    const matchesLocation = !filters.location || alumni.location.includes(filters.location);
+    const matchesYear = filters.year === "all" || alumni.graduationYear.toString() === filters.year;
+    const matchesDepartment = filters.department === "all" || alumni.department === filters.department;
+    const matchesLocation = filters.location === "all" || alumni.location.includes(filters.location);
     const matchesMentor = !filters.mentorAvailable || alumni.mentorAvailable;
 
     return matchesSearch && matchesYear && matchesDepartment && matchesLocation && matchesMentor;
@@ -259,7 +259,7 @@ export function AlumniDirectory() {
                 <SelectValue placeholder="Graduation Year" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Years</SelectItem>
+                <SelectItem value="all">All Years</SelectItem>
                 <SelectItem value="2024">2024</SelectItem>
                 <SelectItem value="2023">2023</SelectItem>
                 <SelectItem value="2022">2022</SelectItem>
@@ -277,7 +277,7 @@ export function AlumniDirectory() {
                 <SelectValue placeholder="Department" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Departments</SelectItem>
+                <SelectItem value="all">All Departments</SelectItem>
                 <SelectItem value="Computer Science">Computer Science</SelectItem>
                 <SelectItem value="Business">Business</SelectItem>
                 <SelectItem value="Engineering">Engineering</SelectItem>
@@ -290,7 +290,7 @@ export function AlumniDirectory() {
                 <SelectValue placeholder="Location" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Locations</SelectItem>
+                <SelectItem value="all">All Locations</SelectItem>
                 <SelectItem value="CA">California</SelectItem>
                 <SelectItem value="WA">Washington</SelectItem>
                 <SelectItem value="TX">Texas</SelectItem>
