@@ -1,4 +1,4 @@
-import { Home, Users, Heart, Briefcase, Calendar, MessageCircle, BarChart3 } from "lucide-react";
+import { Home, Users, Heart, Briefcase, Calendar, MessageCircle as MessageCircleIcon, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,8 @@ const navigationItems = [
   { id: "mentorship", label: "Mentorship", icon: Heart, roles: ["student", "alumni", "faculty"] },
   { id: "careers", label: "Careers", icon: Briefcase, roles: ["all"] },
   { id: "events", label: "Events", icon: Calendar, roles: ["all"] },
-  { id: "community", label: "Community", icon: MessageCircle, roles: ["all"] },
+  { id: "community", label: "Community", icon: MessageCircleIcon, roles: ["all"] },
+  { id: "messages", label: "Messages", icon: MessageCircleIcon, roles: ["all"] },
   { id: "dashboard", label: "Dashboard", icon: BarChart3, roles: ["admin", "faculty"] },
 ];
 

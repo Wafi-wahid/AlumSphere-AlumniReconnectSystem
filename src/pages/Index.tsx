@@ -5,6 +5,10 @@ import { Header } from "@/components/layout/Header";
 import { Navigation } from "@/components/layout/Navigation";
 import { HomePage } from "@/components/dashboard/HomePage";
 import { AlumniDirectory } from "@/components/directory/AlumniDirectory";
+import { MentorshipPage } from "@/components/mentorship/MentorshipPage";
+import { EventsPage } from "@/components/events/EventsPage";
+import { CommunityPage } from "@/components/community/CommunityPage";
+import { MessagesPage } from "@/components/messages/MessagesPage";
 
 const Index = () => {
   const [user, setUser] = useState(null);
@@ -38,33 +42,15 @@ const Index = () => {
       case "directory":
         return <AlumniDirectory />;
       case "mentorship":
-        return (
-          <div className="space-y-6">
-            <h1 className="text-3xl font-bold">Mentorship</h1>
-            <p className="text-muted-foreground">Find mentors and book sessions (Coming soon)</p>
-          </div>
-        );
+        return <MentorshipPage />;
       case "careers":
-        return (
-          <div className="space-y-6">
-            <h1 className="text-3xl font-bold">Career Opportunities</h1>
-            <p className="text-muted-foreground">Browse jobs and referrals (Coming soon)</p>
-          </div>
-        );
+        return <div className="p-8"><h2 className="text-2xl font-bold">Careers - Coming Soon</h2></div>;
       case "events":
-        return (
-          <div className="space-y-6">
-            <h1 className="text-3xl font-bold">Events & Webinars</h1>
-            <p className="text-muted-foreground">Discover networking events (Coming soon)</p>
-          </div>
-        );
+        return <EventsPage />;
       case "community":
-        return (
-          <div className="space-y-6">
-            <h1 className="text-3xl font-bold">Community Feed</h1>
-            <p className="text-muted-foreground">Connect with your community (Coming soon)</p>
-          </div>
-        );
+        return <CommunityPage />;
+      case "messages":
+        return <MessagesPage />;
       case "dashboard":
         return (
           <div className="space-y-6">
