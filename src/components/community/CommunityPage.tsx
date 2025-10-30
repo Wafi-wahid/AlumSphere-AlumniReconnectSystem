@@ -9,6 +9,9 @@ import { useAuth } from "@/store/auth";
 import { db } from "@/lib/firebase";
 import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 type Post = {
   id: string;
@@ -19,6 +22,7 @@ type Post = {
   content: string;
   mediaType?: "image" | "video" | "article";
   mediaUrl?: string;
+  isDummy?: boolean;
   likes: string[]; // userIds
   comments: { id: string; userId: string; userName: string; isAuthor: boolean; text: string; createdAt?: any }[];
   createdAt?: Timestamp;
@@ -29,14 +33,20 @@ export function CommunityPage() {
   const navigate = useNavigate();
 
   const [posts, setPosts] = useState<Post[]>([]);
+  const [dummy, setDummy] = useState<Post | null>(null);
   const [newPost, setNewPost] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadType, setUploadType] = useState<"image" | "video" | "article" | undefined>(undefined);
+  const [articleUrl, setArticleUrl] = useState<string>("");
+  const [articleOpen, setArticleOpen] = useState(false);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [posting, setPosting] = useState(false);
+  const { toast } = useToast();
 
   const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined;
   const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string | undefined;
+  const cloudFolder = import.meta.env.VITE_CLOUDINARY_FOLDER as string | undefined;
 
   async function uploadToCloudinary(file: File, type: "image" | "video") {
     if (!cloudName || !uploadPreset) throw new Error("Cloudinary is not configured");
@@ -45,40 +55,59 @@ export function CommunityPage() {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("upload_preset", uploadPreset);
+    if (cloudFolder) {
+      fd.append("folder", cloudFolder);
+    }
     const res = await fetch(url, { method: "POST", body: fd });
     if (!res.ok) throw new Error("Upload failed");
     const data = await res.json();
     return data.secure_url as string;
   }
 
-  // Subscribe to latest single post
+  // Subscribe to single dummy post; create if missing (not as current user)
   useEffect(() => {
-    const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(1));
-    const unsub = onSnapshot(q, async (snap) => {
-      if (snap.empty) {
-        // Seed a single dummy post once if none exists
-        if (user) {
+    const unsubDummy = onSnapshot(
+      query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(20)),
+      async (snap) => {
+        // find existing dummy
+        const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Post[];
+        const found = docs.find((p) => p.isDummy);
+        if (!found) {
+          // create one generic dummy authored by "Alumni Community"
           await addDoc(collection(db, "posts"), {
-            authorId: user.id,
-            authorName: user.name,
-            authorAvatar: user.avatar ?? null,
-            authorRole: user.role,
-            content: "Welcome to Echo Alum Link! This is your first post.",
+            isDummy: true,
+            authorId: "alum_bot",
+            authorName: "Alumni Community",
+            authorAvatar: "/placeholder.svg",
+            authorRole: "alumni",
+            content: "Welcome to the community! Share your first post.",
             mediaType: null,
             mediaUrl: null,
             likes: [],
             comments: [],
             createdAt: serverTimestamp(),
           });
+          setDummy(null);
+        } else {
+          setDummy(found);
         }
-        setPosts([]);
-        return;
       }
+    );
+    return () => {
+      unsubDummy();
+    };
+  }, []);
+
+  // Subscribe to real posts (exclude dummy client-side), show latest 10
+  useEffect(() => {
+    const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(10));
+    const unsub = onSnapshot(q, (snap) => {
       const items: Post[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-      setPosts(items);
+      const real = items.filter((p) => !p.isDummy);
+      setPosts(real);
     });
     return () => unsub();
-  }, [user]);
+  }, []);
 
   const userLiked = useMemo(() => {
     if (!user) return (postId: string) => false;
@@ -87,7 +116,10 @@ export function CommunityPage() {
 
   const handlePickMedia = (type: "image" | "video" | "article") => {
     setUploadType(type);
-    if (type === "article") return; // handled as text/link in content for now
+    if (type === "article") {
+      setArticleOpen(true);
+      return; // handled via dialog
+    }
     fileInputRef.current?.click();
   };
 
@@ -103,29 +135,41 @@ export function CommunityPage() {
 
   const handleCreatePost = async () => {
     if (!user) return;
-    if (!newPost.trim() && !uploadFile) return;
-
+    if (!newPost.trim() && !uploadFile && !articleUrl) return;
+    setPosting(true);
     let mediaUrl: string | undefined;
-    if (uploadFile && uploadType && uploadType !== "article") {
-      mediaUrl = await uploadToCloudinary(uploadFile, uploadType);
+    try {
+      if (uploadFile && uploadType && uploadType !== "article") {
+        mediaUrl = await uploadToCloudinary(uploadFile, uploadType);
+      }
+      if (uploadType === "article" && articleUrl) {
+        mediaUrl = articleUrl;
+      }
+
+      await addDoc(collection(db, "posts"), {
+        authorId: user.id,
+        authorName: user.name,
+        authorAvatar: user.avatar ?? null,
+        authorRole: user.role,
+        content: newPost.trim(),
+        mediaType: uploadType ?? null,
+        mediaUrl: mediaUrl ?? null,
+        likes: [],
+        comments: [],
+        createdAt: serverTimestamp(),
+      });
+
+      toast({ title: "Posted", description: "Your post is live." });
+      setNewPost("");
+      setUploadFile(null);
+      setUploadType(undefined);
+      setArticleUrl("");
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: "Failed to post", description: e?.message || "Please try again.", variant: "destructive" as any });
+    } finally {
+      setPosting(false);
     }
-
-    await addDoc(collection(db, "posts"), {
-      authorId: user.id,
-      authorName: user.name,
-      authorAvatar: user.avatar ?? null,
-      authorRole: user.role,
-      content: newPost.trim(),
-      mediaType: uploadType ?? null,
-      mediaUrl: mediaUrl ?? null,
-      likes: [],
-      comments: [],
-      createdAt: serverTimestamp(),
-    });
-
-    setNewPost("");
-    setUploadFile(null);
-    setUploadType(undefined);
   };
 
   const handleLike = async (post: Post) => {
@@ -156,7 +200,8 @@ export function CommunityPage() {
 
   const handleMessageAuthor = (post: Post) => {
     if (!post.authorId) return;
-    navigate(`/messages?to=${encodeURIComponent(post.authorId)}`);
+    const template = "I liked the content you shared on your post.";
+    navigate(`/messages?to=${encodeURIComponent(post.authorId)}&toName=${encodeURIComponent(post.authorName)}&template=${encodeURIComponent(template)}`);
   };
 
   const handleShare = (post: Post) => {
@@ -197,6 +242,18 @@ export function CommunityPage() {
                 onChange={(e) => setNewPost(e.target.value)}
                 className="min-h-[100px] resize-none"
               />
+              {/* Local preview before upload */}
+              {uploadFile && uploadType === "image" && (
+                <img src={URL.createObjectURL(uploadFile)} alt="preview" className="mt-3 rounded-md max-h-60 object-cover" />
+              )}
+              {uploadFile && uploadType === "video" && (
+                <video className="mt-3 rounded-md max-h-60" controls>
+                  <source src={URL.createObjectURL(uploadFile)} />
+                </video>
+              )}
+              {uploadType === "article" && articleUrl && (
+                <a href={articleUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block text-primary underline">{articleUrl}</a>
+              )}
             </div>
           </div>
           <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} accept={uploadType === "image" ? "image/*" : uploadType === "video" ? "video/*" : undefined} />
@@ -210,21 +267,77 @@ export function CommunityPage() {
                 <Video className="h-4 w-4 mr-2" />
                 Video
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setUploadType("article")}>
+              <Button size="sm" variant="ghost" onClick={() => handlePickMedia("article")}>
                 <FileText className="h-4 w-4 mr-2" />
                 Article
               </Button>
             </div>
-            <Button size="sm" onClick={handleCreatePost} disabled={!user}>
+            <Button size="sm" onClick={handleCreatePost} disabled={!user || posting}>
               <Send className="h-4 w-4 mr-2" />
-              Post
+              {posting ? "Posting..." : "Post"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Feed (single post in real time) */}
+      {/* Article URL Dialog */}
+      <Dialog open={articleOpen} onOpenChange={setArticleOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add article link</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Input
+              placeholder="https://example.com/article"
+              value={articleUrl}
+              onChange={(e) => setArticleUrl(e.target.value)}
+              type="url"
+              inputMode="url"
+            />
+            <p className="text-xs text-muted-foreground">Paste a valid URL to attach as an article.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setArticleOpen(false); setArticleUrl(""); }}>Cancel</Button>
+            <Button onClick={() => {
+              const ok = /^https?:\/\//i.test(articleUrl.trim());
+              if (!ok) {
+                toast({ title: "Invalid URL", description: "Please enter a valid http(s) URL.", variant: "destructive" as any });
+                return;
+              }
+              setArticleOpen(false);
+            }}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Feed: show dummy (if any) + latest real posts */}
       <div className="space-y-4">
+        {dummy && (
+          <Card key={dummy.id} className="hover:shadow-md transition-shadow border-dashed">
+            <CardContent className="p-6 space-y-4">
+              <div className="flex gap-3">
+                <Avatar className="h-12 w-12">
+                  <AvatarImage src={dummy.authorAvatar} alt={dummy.authorName} />
+                  <AvatarFallback>{dummy.authorName?.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold">{dummy.authorName}</h3>
+                    <Badge variant="secondary" className="text-xs">{dummy.authorRole}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {(() => {
+                      if (!dummy.createdAt) return "Just now";
+                      const d = dummy.createdAt instanceof Timestamp ? dummy.createdAt.toDate() : new Date(dummy.createdAt as any);
+                      return d.toLocaleString();
+                    })()}
+                  </p>
+                </div>
+              </div>
+              {dummy.content && <p className="text-sm leading-relaxed">{dummy.content}</p>}
+            </CardContent>
+          </Card>
+        )}
         {posts.map((post) => {
           const pinnedFirst = [...(post.comments || [])].sort((a, b) => (a.isAuthor === b.isAuthor ? 0 : a.isAuthor ? -1 : 1));
           const liked = userLiked(post.id);
@@ -344,3 +457,4 @@ export function CommunityPage() {
     </div>
   );
 }
+

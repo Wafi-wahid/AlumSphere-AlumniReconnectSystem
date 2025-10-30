@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, Send, MoreVertical, Phone, Video, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useSearchParams } from "react-router-dom";
 
 const mockConversations = [
   {
@@ -81,9 +82,39 @@ const mockMessages = [
 ];
 
 export function MessagesPage() {
-  const [selectedConversation, setSelectedConversation] = useState(mockConversations[0]);
+  const [conversations, setConversations] = useState(mockConversations);
+  const [selectedConversation, setSelectedConversation] = useState(conversations[0]);
   const [newMessage, setNewMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const toName = searchParams.get("toName");
+    const template = searchParams.get("template");
+    if (template) setNewMessage(template);
+    if (toName) {
+      // try to find an existing conversation by name
+      const existing = conversations.find(c => c.name.toLowerCase() === toName.toLowerCase());
+      if (existing) {
+        setSelectedConversation(existing);
+      } else {
+        const temp = {
+          id: Math.max(...conversations.map(c => c.id)) + 1,
+          name: toName,
+          avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b47c?w=150&h=150&fit=crop&crop=face",
+          role: "",
+          lastMessage: "",
+          time: "now",
+          unread: 0,
+          online: false,
+        } as typeof mockConversations[number];
+        const next = [temp, ...conversations];
+        setConversations(next);
+        setSelectedConversation(temp);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const handleSendMessage = () => {
     if (newMessage.trim()) {
@@ -117,7 +148,7 @@ export function MessagesPage() {
 
             <ScrollArea className="h-[500px]">
               <div className="space-y-2">
-                {mockConversations.map((conversation) => (
+                {conversations.map((conversation) => (
                   <Card
                     key={conversation.id}
                     className={`cursor-pointer hover:bg-muted/50 transition-colors ${
