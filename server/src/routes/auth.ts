@@ -73,7 +73,7 @@ authRouter.post('/register', async (req, res) => {
         gradYear: 'gradYear' in parsed ? parsed.gradYear : null,
         linkedinId: 'linkedinId' in parsed ? parsed.linkedinId ?? null : null,
       },
-      select: { id: true, role: true, name: true, email: true },
+      select: { id: true, role: true, name: true, email: true, profilePicture: true },
     });
 
     signAndSetCookie(res, { id: user.id, role: user.role });
@@ -96,7 +96,7 @@ authRouter.post('/login', async (req, res) => {
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
     signAndSetCookie(res, { id: user.id, role: user.role });
-    return res.json({ user: { id: user.id, role: user.role, name: user.name, email: user.email } });
+    return res.json({ user: { id: user.id, role: user.role, name: user.name, email: user.email, profilePicture: user.profilePicture } });
   } catch (e: any) {
     if (e instanceof z.ZodError) return res.status(400).json({ error: e.flatten() });
     return res.status(500).json({ error: 'Login failed' });
@@ -112,7 +112,7 @@ authRouter.post('/logout', (req, res) => {
 // GET /auth/me
 authRouter.get('/me', requireAuth, async (req, res) => {
   const userId = (req as any).user.id as string;
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, name: true, email: true } });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, name: true, email: true, profilePicture: true } });
   if (!user) return res.status(404).json({ error: 'Not found' });
   return res.json({ user });
 });

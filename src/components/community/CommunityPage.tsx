@@ -1,78 +1,176 @@
-import { useState } from "react";
-import { Heart, MessageCircle, Share2, Send, Image, Video, FileText } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Heart, MessageCircle, Share2, Send, Image, Video, FileText, Trash2, MessageSquareText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/store/auth";
+import { db } from "@/lib/firebase";
+import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc } from "firebase/firestore";
+import { useNavigate } from "react-router-dom";
 
-const mockPosts = [
-  {
-    id: 1,
-    author: "Sarah Johnson",
-    avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b47c?w=150&h=150&fit=crop&crop=face",
-    role: "Senior Software Engineer at Google",
-    time: "2 hours ago",
-    content: "Excited to announce that I'll be hosting a webinar on 'Breaking into Tech' next week! Looking forward to sharing my journey and answering your questions. 🚀",
-    likes: 47,
-    comments: 12,
-    shares: 5,
-    badges: ["Top Mentor", "Class of 2018"]
-  },
-  {
-    id: 2,
-    author: "Michael Chen",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face",
-    role: "Product Manager at Microsoft",
-    time: "5 hours ago",
-    content: "Just wrapped up an amazing mentorship session with some brilliant students. The future is bright! If you're looking for product management guidance, feel free to reach out.",
-    image: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&h=400&fit=crop",
-    likes: 89,
-    comments: 23,
-    shares: 8,
-    badges: ["Alumni Mentor"]
-  },
-  {
-    id: 3,
-    author: "Emily Davis",
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face",
-    role: "Engineering Manager at Tesla",
-    time: "1 day ago",
-    content: "We're hiring! Tesla is looking for talented engineers. Alumni get priority in our referral program. DM me if you're interested! 💼⚡",
-    likes: 124,
-    comments: 34,
-    shares: 45,
-    badges: ["Event Speaker", "Class of 2016"]
-  }
-];
+type Post = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar?: string;
+  authorRole: string;
+  content: string;
+  mediaType?: "image" | "video" | "article";
+  mediaUrl?: string;
+  likes: string[]; // userIds
+  comments: { id: string; userId: string; userName: string; isAuthor: boolean; text: string; createdAt?: any }[];
+  createdAt?: Timestamp;
+};
 
 export function CommunityPage() {
-  const [posts, setPosts] = useState(mockPosts);
-  const [newPost, setNewPost] = useState("");
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
-  const handleLike = (postId: number) => {
-    setPosts(posts.map(post => 
-      post.id === postId ? { ...post, likes: post.likes + 1 } : post
-    ));
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [newPost, setNewPost] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadType, setUploadType] = useState<"image" | "video" | "article" | undefined>(undefined);
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined;
+  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string | undefined;
+
+  async function uploadToCloudinary(file: File, type: "image" | "video") {
+    if (!cloudName || !uploadPreset) throw new Error("Cloudinary is not configured");
+    const resource = type === "video" ? "video" : "image";
+    const url = `https://api.cloudinary.com/v1_1/${cloudName}/${resource}/upload`;
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("upload_preset", uploadPreset);
+    const res = await fetch(url, { method: "POST", body: fd });
+    if (!res.ok) throw new Error("Upload failed");
+    const data = await res.json();
+    return data.secure_url as string;
+  }
+
+  // Subscribe to latest single post
+  useEffect(() => {
+    const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(1));
+    const unsub = onSnapshot(q, async (snap) => {
+      if (snap.empty) {
+        // Seed a single dummy post once if none exists
+        if (user) {
+          await addDoc(collection(db, "posts"), {
+            authorId: user.id,
+            authorName: user.name,
+            authorAvatar: user.avatar ?? null,
+            authorRole: user.role,
+            content: "Welcome to Echo Alum Link! This is your first post.",
+            mediaType: null,
+            mediaUrl: null,
+            likes: [],
+            comments: [],
+            createdAt: serverTimestamp(),
+          });
+        }
+        setPosts([]);
+        return;
+      }
+      const items: Post[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setPosts(items);
+    });
+    return () => unsub();
+  }, [user]);
+
+  const userLiked = useMemo(() => {
+    if (!user) return (postId: string) => false;
+    return (postId: string) => posts.find((p) => p.id === postId)?.likes.includes(user.id) ?? false;
+  }, [posts, user]);
+
+  const handlePickMedia = (type: "image" | "video" | "article") => {
+    setUploadType(type);
+    if (type === "article") return; // handled as text/link in content for now
+    fileInputRef.current?.click();
   };
 
-  const handleCreatePost = () => {
-    if (newPost.trim()) {
-      const newPostObj = {
-        id: Date.now(),
-        author: "You",
-        avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
-        role: "Student",
-        time: "Just now",
-        content: newPost,
-        likes: 0,
-        comments: 0,
-        shares: 0,
-        badges: ["Student"]
-      };
-      setPosts([newPostObj, ...posts]);
-      setNewPost("");
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    setUploadFile(f);
+    if (f) {
+      const isVideo = f.type.startsWith("video/");
+      const isImage = f.type.startsWith("image/");
+      setUploadType(isVideo ? "video" : isImage ? "image" : undefined);
     }
+  };
+
+  const handleCreatePost = async () => {
+    if (!user) return;
+    if (!newPost.trim() && !uploadFile) return;
+
+    let mediaUrl: string | undefined;
+    if (uploadFile && uploadType && uploadType !== "article") {
+      mediaUrl = await uploadToCloudinary(uploadFile, uploadType);
+    }
+
+    await addDoc(collection(db, "posts"), {
+      authorId: user.id,
+      authorName: user.name,
+      authorAvatar: user.avatar ?? null,
+      authorRole: user.role,
+      content: newPost.trim(),
+      mediaType: uploadType ?? null,
+      mediaUrl: mediaUrl ?? null,
+      likes: [],
+      comments: [],
+      createdAt: serverTimestamp(),
+    });
+
+    setNewPost("");
+    setUploadFile(null);
+    setUploadType(undefined);
+  };
+
+  const handleLike = async (post: Post) => {
+    if (!user) return;
+    const refDoc = doc(db, "posts", post.id);
+    const already = post.likes.includes(user.id);
+    await updateDoc(refDoc, {
+      likes: already ? arrayRemove(user.id) : arrayUnion(user.id),
+    });
+  };
+
+  const handleAddComment = async (post: Post) => {
+    if (!user) return;
+    const text = (commentInputs[post.id] || "").trim();
+    if (!text) return;
+    const refDoc = doc(db, "posts", post.id);
+    const comment = {
+      id: `${user.id}_${Date.now()}`,
+      userId: user.id,
+      userName: user.name,
+      isAuthor: user.id === post.authorId,
+      text,
+      createdAt: Date.now(),
+    };
+    await updateDoc(refDoc, { comments: arrayUnion(comment) });
+    setCommentInputs((s) => ({ ...s, [post.id]: "" }));
+  };
+
+  const handleMessageAuthor = (post: Post) => {
+    if (!post.authorId) return;
+    navigate(`/messages?to=${encodeURIComponent(post.authorId)}`);
+  };
+
+  const handleShare = (post: Post) => {
+    // Minimal stub
+    alert(`Share post by ${post.authorName} with your connections (stub).`);
+  };
+
+  const handleAdminDelete = async (post: Post) => {
+    if (!user || (user.role !== "admin" && user.role !== "super_admin")) return;
+    const reason = prompt("Reason for deletion (required):");
+    if (!reason) return;
+    // In a full solution, we'd write moderation record. For now, just delete the post.
+    await deleteDoc(doc(db, "posts", post.id));
+    alert(`Post deleted. Reason: ${reason}`);
   };
 
   return (
@@ -89,8 +187,8 @@ export function CommunityPage() {
         <CardContent className="p-6 space-y-4">
           <div className="flex gap-3">
             <Avatar className="h-10 w-10">
-              <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face" />
-              <AvatarFallback>YO</AvatarFallback>
+              <AvatarImage src={user?.avatar} />
+              <AvatarFallback>{user?.name?.split(" ").map((n) => n[0]).join("") ?? "U"}</AvatarFallback>
             </Avatar>
             <div className="flex-1">
               <Textarea
@@ -101,22 +199,23 @@ export function CommunityPage() {
               />
             </div>
           </div>
+          <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} accept={uploadType === "image" ? "image/*" : uploadType === "video" ? "video/*" : undefined} />
           <div className="flex items-center justify-between">
             <div className="flex gap-2">
-              <Button size="sm" variant="ghost">
+              <Button size="sm" variant="ghost" onClick={() => handlePickMedia("image")}>
                 <Image className="h-4 w-4 mr-2" />
                 Photo
               </Button>
-              <Button size="sm" variant="ghost">
+              <Button size="sm" variant="ghost" onClick={() => handlePickMedia("video")}>
                 <Video className="h-4 w-4 mr-2" />
                 Video
               </Button>
-              <Button size="sm" variant="ghost">
+              <Button size="sm" variant="ghost" onClick={() => setUploadType("article")}>
                 <FileText className="h-4 w-4 mr-2" />
                 Article
               </Button>
             </div>
-            <Button size="sm" onClick={handleCreatePost}>
+            <Button size="sm" onClick={handleCreatePost} disabled={!user}>
               <Send className="h-4 w-4 mr-2" />
               Post
             </Button>
@@ -124,85 +223,123 @@ export function CommunityPage() {
         </CardContent>
       </Card>
 
-      {/* Feed */}
+      {/* Feed (single post in real time) */}
       <div className="space-y-4">
-        {posts.map((post) => (
-          <Card key={post.id} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-6 space-y-4">
-              {/* Post Header */}
-              <div className="flex gap-3">
-                <Avatar className="h-12 w-12">
-                  <AvatarImage src={post.avatar} alt={post.author} />
-                  <AvatarFallback>{post.author.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold">{post.author}</h3>
-                    {post.badges.map((badge) => (
-                      <Badge key={badge} variant="secondary" className="text-xs">
-                        {badge}
+        {posts.map((post) => {
+          const pinnedFirst = [...(post.comments || [])].sort((a, b) => (a.isAuthor === b.isAuthor ? 0 : a.isAuthor ? -1 : 1));
+          const liked = userLiked(post.id);
+          return (
+            <Card key={post.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-6 space-y-4">
+                {/* Post Header */}
+                <div className="flex gap-3">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src={post.authorAvatar} alt={post.authorName} />
+                    <AvatarFallback>{post.authorName?.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">{post.authorName}</h3>
+                      <Badge variant="secondary" className="text-xs">
+                        {post.authorRole}
                       </Badge>
-                    ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {(() => {
+                        if (!post.createdAt) return "Just now";
+                        const d = post.createdAt instanceof Timestamp ? post.createdAt.toDate() : new Date(post.createdAt as any);
+                        return d.toLocaleString();
+                      })()}
+                    </p>
                   </div>
-                  <p className="text-sm text-muted-foreground">{post.role}</p>
-                  <p className="text-xs text-muted-foreground">{post.time}</p>
+                  {(user?.role === "admin" || user?.role === "super_admin") && (
+                    <Button size="icon" variant="ghost" onClick={() => handleAdminDelete(post)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
-              </div>
 
-              {/* Post Content */}
-              <p className="text-sm leading-relaxed">{post.content}</p>
+                {/* Post Content */}
+                {post.content && <p className="text-sm leading-relaxed">{post.content}</p>}
 
-              {/* Post Image */}
-              {post.image && (
-                <img 
-                  src={post.image} 
-                  alt="Post content" 
-                  className="rounded-lg w-full object-cover max-h-96"
-                />
-              )}
+                {/* Media */}
+                {post.mediaUrl && post.mediaType === "image" && (
+                  <img src={post.mediaUrl} alt="Post content" className="rounded-lg w-full object-cover max-h-96" />
+                )}
+                {post.mediaUrl && post.mediaType === "video" && (
+                  <video controls className="rounded-lg w-full max-h-96">
+                    <source src={post.mediaUrl} />
+                  </video>
+                )}
+                {post.mediaType === "article" && post.mediaUrl && (
+                  <a href={post.mediaUrl} target="_blank" rel="noreferrer" className="text-primary underline">Open article</a>
+                )}
 
-              {/* Post Actions */}
-              <div className="flex items-center justify-between pt-2 border-t">
-                <div className="flex gap-6">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="gap-2"
-                    onClick={() => handleLike(post.id)}
-                  >
-                    <Heart className="h-4 w-4" />
-                    <span className="text-sm">{post.likes}</span>
-                  </Button>
-                  <Button variant="ghost" size="sm" className="gap-2">
-                    <MessageCircle className="h-4 w-4" />
-                    <span className="text-sm">{post.comments}</span>
-                  </Button>
-                  <Button variant="ghost" size="sm" className="gap-2">
-                    <Share2 className="h-4 w-4" />
-                    <span className="text-sm">{post.shares}</span>
-                  </Button>
+                {/* Post Actions */}
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <div className="flex gap-2">
+                    <Button 
+                      variant={liked ? "default" : "ghost"}
+                      size="sm" 
+                      className="gap-2"
+                      onClick={() => handleLike(post)}
+                    >
+                      <Heart className="h-4 w-4" />
+                      <span className="text-sm">{post.likes?.length ?? 0}</span>
+                    </Button>
+                    <Button variant="ghost" size="sm" className="gap-2" onClick={() => handleMessageAuthor(post)}>
+                      <MessageSquareText className="h-4 w-4" />
+                      Message
+                    </Button>
+                    <Button variant="ghost" size="sm" className="gap-2" onClick={() => handleShare(post)}>
+                      <Share2 className="h-4 w-4" />
+                      Share
+                    </Button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Comment Input */}
-              <div className="flex gap-3 pt-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face" />
-                  <AvatarFallback>YO</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 flex gap-2">
-                  <Textarea 
-                    placeholder="Write a comment..." 
-                    className="min-h-[60px] resize-none"
-                  />
-                  <Button size="sm">
-                    <Send className="h-4 w-4" />
-                  </Button>
+                {/* Comments */}
+                <div className="space-y-3">
+                  {pinnedFirst.map((c) => (
+                    <div key={c.id} className="flex gap-2 items-start">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback>{c.userName.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{c.userName}</span>
+                          {c.isAuthor && (
+                            <Badge variant="secondary" className="text-[10px]">Author</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm">{c.text}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+
+                {/* Comment Input */}
+                <div className="flex gap-3 pt-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={user?.avatar} />
+                    <AvatarFallback>{user?.name?.split(' ').map(n => n[0]).join('') ?? 'U'}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 flex gap-2">
+                    <Textarea 
+                      placeholder="Write a comment..." 
+                      className="min-h-[60px] resize-none"
+                      value={commentInputs[post.id] || ""}
+                      onChange={(e) => setCommentInputs((s) => ({ ...s, [post.id]: e.target.value }))}
+                    />
+                    <Button size="sm" onClick={() => handleAddComment(post)} disabled={!user}>
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

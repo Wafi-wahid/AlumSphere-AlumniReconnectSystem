@@ -18,6 +18,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refresh: () => Promise<void>;
   registerStudent: (payload: {
     name: string;
     email: string;
@@ -44,11 +45,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const refresh = async () => {
+    try {
+      const { user } = await AuthAPI.me();
+      setUser({
+        ...user,
+        avatar: (user as any).profilePicture ?? (user as any).avatar,
+        notifications: 2,
+        messages: 1,
+      });
+    } catch (e) {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     (async () => {
       try {
         const { user } = await AuthAPI.me();
-        setUser({ ...user, notifications: 2, messages: 1 });
+        setUser({
+          ...user,
+          avatar: (user as any).profilePicture ?? (user as any).avatar,
+          notifications: 2,
+          messages: 1,
+        });
       } catch (e) {
         setUser(null);
       } finally {
@@ -59,7 +79,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const { user } = await AuthAPI.login({ email, password });
-    setUser({ ...user, notifications: 2, messages: 1 });
+    setUser({
+      ...user,
+      avatar: (user as any).profilePicture ?? (user as any).avatar,
+      notifications: 2,
+      messages: 1,
+    });
     const preferredTab = user.role === 'admin' ? 'dashboard' : 'home';
     localStorage.setItem('preferredTab', preferredTab);
   };
@@ -72,17 +97,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const registerStudent: AuthContextValue['registerStudent'] = async (payload) => {
     const { user } = await AuthAPI.register(payload);
-    setUser({ ...user, notifications: 0, messages: 0 });
+    setUser({
+      ...user,
+      avatar: (user as any).profilePicture ?? (user as any).avatar,
+      notifications: 0,
+      messages: 0,
+    });
     localStorage.setItem('preferredTab', 'home');
   };
 
   const registerAlumni: AuthContextValue['registerAlumni'] = async (payload) => {
     const { user } = await AuthAPI.register(payload);
-    setUser({ ...user, notifications: 0, messages: 0 });
+    setUser({
+      ...user,
+      avatar: (user as any).profilePicture ?? (user as any).avatar,
+      notifications: 0,
+      messages: 0,
+    });
     localStorage.setItem('preferredTab', 'home');
   };
 
-  const value = useMemo(() => ({ user, loading, login, logout, registerStudent, registerAlumni }), [user, loading]);
+  const value = useMemo(() => ({ user, loading, login, logout, refresh, registerStudent, registerAlumni }), [user, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -19,7 +19,12 @@ const seasons = ["Spring", "Fall"] as const;
 
 const schema = z.object({
   name: z.string().min(2, "Enter full name"),
-  profilePicture: z.string().url("Must be a valid image URL").optional().or(z.literal("")),
+  // accept absolute URLs or local upload paths like /uploads/filename.png
+  profilePicture: z
+    .string()
+    .regex(/^(https?:\/\/.*|\/uploads\/.*)$/i, "Must be a URL or /uploads path")
+    .optional()
+    .or(z.literal("")),
   program: z.string().min(2, "Select or enter program"),
   batchSeason: z.enum(seasons),
   batchYear: z.coerce.number().int().min(2010).max(2025),
@@ -33,7 +38,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const [loading, setLoading] = useState(true);
   const [serverUser, setServerUser] = useState<any>(null);
 
@@ -69,7 +74,9 @@ export default function Profile() {
         setLoading(false);
       }
     })();
-  }, [reset]);
+    // Ensure header avatar updates if coming back from LinkedIn redirect
+    refresh().catch(() => {});
+  }, [reset, refresh]);
 
   const experienceYears = watch("experienceYears");
   const mentorEligible = useMemo(() => (Number(experienceYears) || 0) >= 4, [experienceYears]);
@@ -82,7 +89,11 @@ export default function Profile() {
       const res = await fetch(`${base}/me/avatar`, { method: 'POST', body: form, credentials: 'include' });
       if (!res.ok) throw new Error('Upload failed');
       const data = await res.json();
-      setValue('profilePicture', data.url);
+      // add a cache-busting query param so the image updates immediately
+      const busted = `${data.url}${data.url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+      setValue('profilePicture', busted);
+      // also refresh auth user so the header avatar updates
+      refresh().catch(() => {});
       toast.success('Avatar uploaded');
     } catch (e: any) {
       toast.error(e.message || 'Upload failed');
@@ -99,6 +110,8 @@ export default function Profile() {
       };
       const res = await UsersAPI.updateMe(payload);
       setServerUser(res.user);
+      // refresh auth user so global header reflects latest profile picture/headline
+      refresh().catch(() => {});
       toast.success("Profile updated");
     } catch (e: any) {
       toast.error(e.message || "Update failed");

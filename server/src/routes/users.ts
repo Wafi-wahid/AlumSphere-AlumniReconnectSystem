@@ -1,16 +1,26 @@
-import { Router } from 'express';
+import { Router, Request } from 'express';
 import { prisma } from '../prisma';
 import { requireAuth } from '../middleware/auth';
 import { z } from 'zod';
-import multer from 'multer';
+import multer = require('multer');
 import path from 'path';
+
 
 export const userRouter = Router();
 
 // Multer storage for avatars
+type UploadedFileLite = { originalname: string };
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, path.resolve('uploads')),
-  filename: (_req, file, cb) => {
+  destination: (
+    _req: Request,
+    _file: UploadedFileLite,
+    cb: (error: Error | null, destination: string) => void,
+  ) => cb(null, path.resolve('uploads')),
+  filename: (
+    _req: Request,
+    file: UploadedFileLite,
+    cb: (error: Error | null, filename: string) => void,
+  ) => {
     const ext = path.extname(file.originalname) || '.png';
     const name = `avatar_${Date.now()}${ext}`;
     cb(null, name);
@@ -129,7 +139,8 @@ userRouter.patch('/me', requireAuth, async (req, res) => {
 userRouter.post('/me/avatar', requireAuth, upload.single('avatar'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   const userId = (req as any).user.id as string;
-  const publicUrl = `/uploads/${req.file.filename}`;
+  const base = `${req.protocol}://${req.get('host')}`;
+  const publicUrl = `${base}/uploads/${req.file.filename}`;
   const updated = await prisma.user.update({ where: { id: userId }, data: { profilePicture: publicUrl } });
   return res.json({ url: publicUrl });
 });
