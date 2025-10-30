@@ -9,6 +9,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/store/auth";
 import Register from "@/pages/Register";
 import Profile from "@/pages/Profile";
+import { MessagesPage } from "@/components/messages/MessagesPage";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/register" element={<Register />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/messages" element={<MessagesPage />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

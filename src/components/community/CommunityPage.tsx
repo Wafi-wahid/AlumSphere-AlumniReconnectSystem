@@ -201,7 +201,10 @@ export function CommunityPage() {
   const handleMessageAuthor = (post: Post) => {
     if (!post.authorId) return;
     const template = "I liked the content you shared on your post.";
-    navigate(`/messages?to=${encodeURIComponent(post.authorId)}&toName=${encodeURIComponent(post.authorName)}&template=${encodeURIComponent(template)}`);
+    const me = user?.id || "me";
+    const other = post.authorId;
+    const convId = [me, other].sort().join("__");
+    navigate(`/messages?to=${encodeURIComponent(post.authorId)}&toName=${encodeURIComponent(post.authorName)}&convId=${encodeURIComponent(convId)}&template=${encodeURIComponent(template)}`);
   };
 
   const handleShare = (post: Post) => {
