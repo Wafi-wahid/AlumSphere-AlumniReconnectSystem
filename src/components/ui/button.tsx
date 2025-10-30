@@ -19,6 +19,8 @@ const buttonVariants = cva(
         linkedin: "bg-[#0077b5] text-white hover:bg-[#005885] shadow-sm hover:shadow-md",
         success: "bg-success text-success-foreground hover:bg-success/90",
         warning: "bg-warning text-warning-foreground hover:bg-warning/90",
+        brand: "bg-[hsl(var(--brand-cta))] text-[hsl(var(--brand-cta-foreground))] hover:brightness-105 shadow-sm hover:shadow-md",
+        soft: "bg-[hsl(var(--brand-cta)/0.12)] text-foreground hover:bg-[hsl(var(--brand-cta)/0.2)]",
       },
       size: {
         default: "h-10 px-4 py-2",

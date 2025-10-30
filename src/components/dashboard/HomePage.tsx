@@ -1,8 +1,13 @@
+import { useState } from "react";
 import { Bell, TrendingUp, Users, Calendar, Briefcase, Heart, MessageSquare, Star } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 interface HomePageProps {
   user: any;
@@ -10,6 +15,15 @@ interface HomePageProps {
 }
 
 export function HomePage({ user, onNavigate }: HomePageProps) {
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [referOpen, setReferOpen] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<{ title: string; company: string } | null>(null);
+  const [applicant, setApplicant] = useState({ name: user?.name || "", email: user?.email || "", resume: "" });
+  const connections = [
+    { name: "Ali Raza", avatar: "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=80&h=80&fit=crop&crop=face", role: "SWE, Google" },
+    { name: "Maria Khan", avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&h=80&fit=crop&crop=face", role: "PM, Microsoft" },
+    { name: "Zain Ahmed", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop&crop=face", role: "ML Eng, OpenAI" },
+  ];
   const recentActivity = [
     {
       type: "mentorship",
@@ -103,7 +117,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
         {quickStats.map((stat) => {
           const Icon = stat.icon;
           return (
-            <Card key={stat.label}>
+            <Card key={stat.label} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
@@ -125,7 +139,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Activity */}
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Bell className="h-5 w-5" />
@@ -156,7 +170,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 </div>
               </div>
             ))}
-            <Button variant="outline" className="w-full">
+            <Button variant="soft" className="w-full transition-transform hover:scale-[1.02]" onClick={() => onNavigate("community")}>
               View All Activity
             </Button>
           </CardContent>
@@ -209,7 +223,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Events */}
-        <Card>
+        <Card className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
@@ -236,17 +250,24 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                     </span>
                   </div>
                 </div>
-                <Button size="sm">RSVP</Button>
+                <Button
+                  size="sm"
+                  variant="brand"
+                  className="transition-transform hover:scale-[1.03]"
+                  onClick={() => toast.success(`Spot reserved for ${event.title}`)}
+                >
+                  RSVP
+                </Button>
               </div>
             ))}
-            <Button variant="outline" className="w-full" onClick={() => onNavigate("events")}>
+            <Button variant="soft" className="w-full transition-transform hover:scale-[1.02]" onClick={() => onNavigate("events")}>
               View All Events
             </Button>
           </CardContent>
         </Card>
 
         {/* Featured Job Opportunities */}
-        <Card>
+        <Card className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Briefcase className="h-5 w-5" />
@@ -275,19 +296,102 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Button size="sm">Apply</Button>
-                  <Button size="sm" variant="outline">
+                  <Button
+                    size="sm"
+                    variant="brand"
+                    className="transition-transform hover:scale-[1.03]"
+                    onClick={() => {
+                      setSelectedJob({ title: job.title, company: job.company });
+                      setApplyOpen(true);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="soft"
+                    className="transition-transform hover:scale-[1.02]"
+                    onClick={() => {
+                      setSelectedJob({ title: job.title, company: job.company });
+                      setReferOpen(true);
+                    }}
+                  >
                     Refer
                   </Button>
                 </div>
               </div>
             ))}
-            <Button variant="outline" className="w-full" onClick={() => onNavigate("careers")}>
+            <Button variant="brand" className="w-full transition-transform hover:scale-[1.02]" onClick={() => onNavigate("careers")}>
               View All Jobs
             </Button>
           </CardContent>
         </Card>
       </div>
+
+      {/* Apply Dialog */}
+      <Dialog open={applyOpen} onOpenChange={setApplyOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Apply for {selectedJob?.title}</DialogTitle>
+            <DialogDescription>{selectedJob?.company}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Full Name</Label>
+              <Input id="name" value={applicant.name} onChange={(e) => setApplicant({ ...applicant, name: e.target.value })} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" value={applicant.email} onChange={(e) => setApplicant({ ...applicant, email: e.target.value })} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="resume">Resume URL</Label>
+              <Input id="resume" placeholder="https://..." value={applicant.resume} onChange={(e) => setApplicant({ ...applicant, resume: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="soft" onClick={() => setApplyOpen(false)}>Cancel</Button>
+            <Button
+              variant="brand"
+              onClick={() => {
+                toast.success(`Application submitted for ${selectedJob?.title}`);
+                setApplyOpen(false);
+                setApplicant({ name: user?.name || "", email: user?.email || "", resume: "" });
+              }}
+            >
+              Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Refer Dialog */}
+      <Dialog open={referOpen} onOpenChange={setReferOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Refer for {selectedJob?.title}</DialogTitle>
+            <DialogDescription>Select a connection to refer</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 max-h-80 overflow-auto pr-2">
+            {connections.map((c) => (
+              <div key={c.name} className="flex items-center gap-3 p-2 rounded-md hover:bg-accent/60">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={c.avatar} />
+                  <AvatarFallback>{c.name.split(' ').map(n=>n[0]).join('').toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <div className="text-sm font-medium">{c.name}</div>
+                  <div className="text-xs text-muted-foreground">{c.role}</div>
+                </div>
+                <Button size="sm" variant="soft" onClick={() => { toast.success(`Referred ${c.name}`); setReferOpen(false); }}>Refer</Button>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="soft" onClick={() => setReferOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

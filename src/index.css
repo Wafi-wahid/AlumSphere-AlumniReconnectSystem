@@ -9,7 +9,8 @@ All colors MUST be HSL.
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 210 12% 16%;
+    /* Neutral dark for text/icons: #3E3E3E */
+    --foreground: 0 0% 24%;
 
     --card: 0 0% 100%;
     --card-foreground: 210 12% 16%;
@@ -17,20 +18,33 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 210 12% 16%;
 
-    /* Professional blue color system */
-    --primary: 210 100% 35%;
+    /* Primary: dark blue #0A2342 -> hsl(213,74%,15%) */
+    --primary: 213 74% 15%;
     --primary-foreground: 0 0% 100%;
-    --primary-light: 210 100% 45%;
-    --primary-dark: 210 100% 25%;
+    --primary-light: 213 74% 25%;
+    --primary-dark: 213 74% 10%;
 
+    /* Secondary (mustard) #F2A71B -> ~hsl(39,89%,53%) */
+    --brand-secondary: 39 89% 53%;
+    --brand-secondary-foreground: 0 0% 10%;
+
+    /* Gold accent #FFC857 -> hsl(40,100%,67%) for hovers/micro-interactions */
+    --brand-accent: 40 100% 67%;
+
+    /* CTA Light Blue #66B2FF -> hsl(207,100%,70%) */
+    --brand-cta: 207 100% 70%;
+    --brand-cta-foreground: 0 0% 100%;
+
+    /* Keep neutral secondary for surfaces */
     --secondary: 210 20% 96%;
     --secondary-foreground: 210 12% 16%;
 
     --muted: 210 20% 96%;
     --muted-foreground: 210 10% 46%;
 
-    --accent: 210 40% 92%;
-    --accent-foreground: 210 12% 16%;
+    /* Accent: light gray #D9D9D9 */
+    --accent: 0 0% 85%;
+    --accent-foreground: 0 0% 24%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
@@ -49,11 +63,13 @@ All colors MUST be HSL.
 
     /* Custom design tokens */
     --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    --gradient-secondary: linear-gradient(135deg, hsl(var(--brand-secondary)), hsl(var(--brand-accent)));
+    --gradient-duo: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-cta)));
     --gradient-subtle: linear-gradient(180deg, hsl(var(--background)), hsl(var(--secondary)));
     --shadow-soft: 0 2px 8px -2px hsl(var(--primary) / 0.1);
-    --shadow-medium: 0 4px 16px -4px hsl(var(--primary) / 0.15);
-    --shadow-strong: 0 8px 32px -8px hsl(var(--primary) / 0.2);
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --shadow-medium: 0 6px 20px -6px hsl(var(--primary) / 0.18);
+    --shadow-strong: 0 12px 40px -12px hsl(var(--primary) / 0.25);
+    --transition-smooth: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
 
     --sidebar-background: 0 0% 98%;
 
@@ -82,7 +98,7 @@ All colors MUST be HSL.
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
+    --primary: 220 70% 50%;
     --primary-foreground: 222.2 47.4% 11.2%;
 
     --secondary: 217.2 32.6% 17.5%;
@@ -117,6 +133,12 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+  }
+
+  /* Better focus visible */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.4), 0 0 0 6px hsl(var(--brand-secondary) / 0.25);
   }
 }

@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LoginPage } from "@/components/auth/LoginPage";
-import { LinkedInSync } from "@/components/profile/LinkedInSync";
 import { Header } from "@/components/layout/Header";
 import { Navigation } from "@/components/layout/Navigation";
 import { HomePage } from "@/components/dashboard/HomePage";
@@ -9,31 +8,22 @@ import { MentorshipPage } from "@/components/mentorship/MentorshipPage";
 import { EventsPage } from "@/components/events/EventsPage";
 import { CommunityPage } from "@/components/community/CommunityPage";
 import { MessagesPage } from "@/components/messages/MessagesPage";
+import { FameHub } from "@/components/fame/FameHub";
+import { useAuth } from "@/store/auth";
 
 const Index = () => {
-  const [user, setUser] = useState(null);
+  const { user, loading } = useAuth();
   const [activeTab, setActiveTab] = useState("home");
-  const [showLinkedInSync, setShowLinkedInSync] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const handleLogin = (userData: any) => {
-    setUser(userData);
-    // Show LinkedIn sync for non-LinkedIn users
-    if (!userData.linkedinSynced) {
-      setShowLinkedInSync(true);
-    }
-  };
+  // Apply preferred tab based on role after login
+  useEffect(() => {
+    if (!user) return;
+    const saved = localStorage.getItem('preferredTab');
+    if (saved) setActiveTab(saved);
+    else setActiveTab(user.role === 'admin' ? 'dashboard' : 'home');
+  }, [user]);
 
-  const handleLinkedInSyncComplete = (linkedInData: any) => {
-    if (user) {
-      setUser({
-        ...user,
-        ...linkedInData,
-        linkedinSynced: true
-      });
-    }
-    setShowLinkedInSync(false);
-  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -51,35 +41,35 @@ const Index = () => {
         return <CommunityPage />;
       case "messages":
         return <MessagesPage />;
+      case "fame":
+        return <FameHub />;
       case "dashboard":
-        return (
+        return user?.role === 'admin' || user?.role === 'super_admin' ? (
           <div className="space-y-6">
             <h1 className="text-3xl font-bold">Admin Dashboard</h1>
             <p className="text-muted-foreground">Analytics and management tools (Coming soon)</p>
           </div>
+        ) : (
+          <HomePage user={user} onNavigate={setActiveTab} />
         );
       default:
         return <HomePage user={user} onNavigate={setActiveTab} />;
     }
   };
 
-  if (!user) {
-    return <LoginPage onLogin={handleLogin} />;
-  }
+  if (loading) return <div className="p-8 text-center text-muted-foreground">Loading...</div>;
+  if (!user) return <LoginPage />;
 
   return (
     <div className="min-h-screen bg-background">
-      <Header 
-        currentUser={user}
-        onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
-      />
+      <Header currentUser={user} onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
       
       <div className="flex">
         {/* Sidebar */}
         <div className={`
-          fixed inset-y-0 left-0 top-16 z-30 w-64 transition-transform duration-300
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:relative md:top-0 md:translate-x-0 md:block
+          fixed inset-y-0 left-0 top-16 z-30 w-64 transition-transform duration-300 ease-out
+          ${sidebarOpen ? 'translate-x-0 shadow-md' : '-translate-x-full'}
+          md:relative md:top-0 md:translate-x-0 md:block md:shadow-none
         `}>
           <Navigation
             activeTab={activeTab}
@@ -98,17 +88,11 @@ const Index = () => {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 p-6 md:ml-0">
+        <main id="main-content" className="flex-1 p-6 md:p-8 md:ml-0 container mx-auto max-w-7xl">
           {renderContent()}
         </main>
       </div>
 
-      {/* LinkedIn Sync Modal */}
-      <LinkedInSync
-        isOpen={showLinkedInSync}
-        onClose={() => setShowLinkedInSync(false)}
-        onSyncComplete={handleLinkedInSyncComplete}
-      />
     </div>
   );
 };

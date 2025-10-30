@@ -1,4 +1,4 @@
-import { Home, Users, Heart, Briefcase, Calendar, MessageCircle as MessageCircleIcon, BarChart3 } from "lucide-react";
+import { Home, Users, Heart, Briefcase, Calendar, MessageCircle as MessageCircleIcon, BarChart3, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ const navigationItems = [
   { id: "events", label: "Events", icon: Calendar, roles: ["all"] },
   { id: "community", label: "Community", icon: MessageCircleIcon, roles: ["all"] },
   { id: "messages", label: "Messages", icon: MessageCircleIcon, roles: ["all"] },
+  { id: "fame", label: "Hall of Fame", icon: Award, roles: ["all"] },
   { id: "dashboard", label: "Dashboard", icon: BarChart3, roles: ["admin", "faculty"] },
 ];
 
@@ -38,11 +39,19 @@ export function Navigation({ activeTab, onTabChange, userRole, className }: Navi
               key={item.id}
               variant={isActive ? "default" : "ghost"}
               className={cn(
-                "w-full justify-start gap-3 h-12",
-                isActive && "bg-primary text-primary-foreground shadow-sm"
+                "w-full justify-start gap-3 h-12 group relative overflow-hidden",
+                isActive && "bg-primary text-primary-foreground shadow-sm",
+                !isActive && "hover:bg-accent/60"
               )}
               onClick={() => onTabChange(item.id)}
             >
+              {/* Active indicator bar */}
+              <span
+                className={cn(
+                  "absolute left-0 top-0 h-full w-1 bg-[hsl(var(--brand-accent))] origin-top transition-transform duration-200",
+                  isActive ? "scale-y-100" : "scale-y-0 group-hover:scale-y-100"
+                )}
+              />
               <Icon className="h-5 w-5" />
               <span className="font-medium">{item.label}</span>
               

@@ -1,0 +1,36 @@
+// Prisma schema for role-based users
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(cuid())
+  name             String
+  email            String   @unique
+  passwordHash     String
+  role             String   // one of: student | alumni | admin | super_admin
+  sapId            String?  @unique
+  batchSeason      String?  // Spring/Fall
+  batchYear        Int?
+  gradSeason       String?  // Spring/Fall
+  gradYear         Int?
+  linkedinId       String?
+  // Profile fields
+  profilePicture   String?
+  program          String?  // e.g., Software Engineering, Computer Science
+  currentCompany   String?
+  skills           String?  // comma-separated list (store simple string for SQLite)
+  profileHeadline  String?
+  location         String?
+  experienceYears  Int?
+  profileCompleted Boolean  @default(false)
+  mentorEligible   Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

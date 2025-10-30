@@ -6,30 +6,21 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { GraduationCap, Linkedin, Building2, UserCheck, Shield } from "lucide-react";
+import { useAuth } from "@/store/auth";
+import { toast } from "sonner";
 
-interface LoginPageProps {
-  onLogin: (userData: any) => void;
-}
-
-export function LoginPage({ onLogin }: LoginPageProps) {
+export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const { login } = useAuth();
 
   const handleLinkedInLogin = () => {
     setIsLoading(true);
     // Mock LinkedIn OAuth flow
     setTimeout(() => {
-      onLogin({
-        name: "Sarah Johnson",
-        email: "sarah.johnson@email.com",
-        role: "alumni",
-        avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b47c?w=150&h=150&fit=crop&crop=face",
-        linkedinSynced: true,
-        graduationYear: 2018,
-        department: "Computer Science",
-        currentCompany: "Google",
-        currentRole: "Senior Software Engineer"
-      });
+      toast.success("LinkedIn login placeholder");
       setIsLoading(false);
     }, 2000);
   };
@@ -37,16 +28,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const handleUniversityLogin = () => {
     setIsLoading(true);
     setTimeout(() => {
-      onLogin({
-        name: "Alex Chen",
-        email: "alex.chen@university.edu",
-        role: "student",
-        avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face",
-        linkedinSynced: false,
-        graduationYear: 2025,
-        department: "Engineering",
-        currentRole: "Final Year Student"
-      });
+      toast.success("University SSO placeholder");
       setIsLoading(false);
     }, 1500);
   };
@@ -83,10 +65,41 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="grid gap-2">
+                <Label htmlFor="email">Email</Label>
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="password">Password</Label>
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+              </div>
+              <Button
+                variant="brand"
+                className="w-full h-10"
+                disabled={isLoading}
+                onClick={async () => {
+                  try {
+                    setIsLoading(true);
+                    await login(email, password);
+                    toast.success("Logged in");
+                  } catch (e: any) {
+                    toast.error(e.message || "Login failed");
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+              >
+                Sign In
+              </Button>
+              <div className="text-xs text-center text-muted-foreground">
+                Don’t have an account? <a className="text-primary underline" href="/register">Create one</a>
+              </div>
+            </div>
             {/* LinkedIn Login */}
             <Button
-              variant="linkedin"
-              className="w-full h-12"
+              variant="brand"
+              className="w-full h-12 transition-transform hover:scale-[1.02]"
               onClick={handleLinkedInLogin}
               disabled={isLoading}
             >
@@ -96,8 +109,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
             {/* University SSO */}
             <Button
-              variant="outline"
-              className="w-full h-12"
+              variant="soft"
+              className="w-full h-12 transition-transform hover:scale-[1.02]"
               onClick={handleUniversityLogin}
               disabled={isLoading}
             >
@@ -121,26 +134,15 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 return (
                   <Button
                     key={user.role}
-                    variant="outline"
-                    className="h-16 flex-col gap-2"
+                    variant="soft"
+                    className="h-16 flex-col gap-2 transition-transform hover:scale-[1.02]"
                     onClick={() => {
                       setIsLoading(true);
-                      setTimeout(() => {
-                        onLogin({
-                          name: `Demo ${user.name}`,
-                          email: `demo.${user.role}@university.edu`,
-                          role: user.role,
-                          avatar: `https://images.unsplash.com/photo-${user.role === 'student' ? '1507003211169-0a1dd7228f2d' : user.role === 'alumni' ? '1494790108755-2616b612b47c' : user.role === 'recruiter' ? '1472099645785-5658abf4ff4e' : '1560250097-0b93528c311a'}?w=150&h=150&fit=crop&crop=face`,
-                          linkedinSynced: user.role === 'alumni',
-                          notifications: Math.floor(Math.random() * 5),
-                          messages: Math.floor(Math.random() * 3)
-                        });
-                        setIsLoading(false);
-                      }, 1000);
+                      setTimeout(() => { setIsLoading(false); toast.info('Demo mode disabled'); }, 800);
                     }}
                     disabled={isLoading}
                   >
-                    <div className={`w-6 h-6 ${user.color} rounded-full flex items-center justify-center`}>
+                    <div className={`${user.color} w-6 h-6 rounded-full flex items-center justify-center`}>
                       <Icon className="h-3 w-3 text-white" />
                     </div>
                     <span className="text-xs">{user.name}</span>
