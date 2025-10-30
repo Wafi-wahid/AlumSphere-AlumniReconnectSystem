@@ -166,7 +166,7 @@ export function MessagesPage() {
       text,
       createdAt: serverTimestamp(),
     });
-    await setDoc(convRef, { lastMessage: text, updatedAt: serverTimestamp() }, { merge: true });
+    await setDoc(convRef, { lastMessage: text, lastSenderId: user.id, lastSenderName: user.name, updatedAt: serverTimestamp() }, { merge: true });
     setNewMessage("");
   };
 

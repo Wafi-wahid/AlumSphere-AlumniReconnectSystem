@@ -204,7 +204,14 @@ export function CommunityPage() {
     const me = user?.id || "me";
     const other = post.authorId;
     const convId = [me, other].sort().join("__");
-    navigate(`/messages?to=${encodeURIComponent(post.authorId)}&toName=${encodeURIComponent(post.authorName)}&convId=${encodeURIComponent(convId)}&template=${encodeURIComponent(template)}`);
+    const params = new URLSearchParams({
+      tab: "messages",
+      to: post.authorId,
+      toName: post.authorName,
+      convId,
+      template,
+    });
+    navigate({ pathname: "/", search: `?${params.toString()}` });
   };
 
   const handleShare = (post: Post) => {

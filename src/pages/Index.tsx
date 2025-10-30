@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { Header } from "@/components/layout/Header";
 import { Navigation } from "@/components/layout/Navigation";
@@ -9,20 +10,38 @@ import { EventsPage } from "@/components/events/EventsPage";
 import { CommunityPage } from "@/components/community/CommunityPage";
 import { MessagesPage } from "@/components/messages/MessagesPage";
 import { FameHub } from "@/components/fame/FameHub";
+import Profile from "@/pages/Profile";
 import { useAuth } from "@/store/auth";
 
 const Index = () => {
   const { user, loading } = useAuth();
   const [activeTab, setActiveTab] = useState("home");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  // Apply preferred tab based on role after login
+  // Apply preferred tab based on role after login, but prioritize URL ?tab
   useEffect(() => {
     if (!user) return;
+    const params = new URLSearchParams(location.search);
+    const tabFromUrl = params.get('tab');
+    if (tabFromUrl) {
+      setActiveTab(tabFromUrl);
+      return;
+    }
     const saved = localStorage.getItem('preferredTab');
     if (saved) setActiveTab(saved);
     else setActiveTab(user.role === 'admin' ? 'dashboard' : 'home');
   }, [user]);
+
+  // React to URL ?tab=... to keep UI consistent without full route change
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
+    }
+  }, [location.search]);
 
 
   const renderContent = () => {
@@ -41,6 +60,8 @@ const Index = () => {
         return <CommunityPage />;
       case "messages":
         return <MessagesPage />;
+      case "profile":
+        return <Profile />;
       case "fame":
         return <FameHub />;
       case "dashboard":
