@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, Filter, MapPin, Briefcase, GraduationCap, MessageCircle, Heart, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { db } from "@/lib/firebase";
+import { collection, onSnapshot, query } from "firebase/firestore";
 
 const mockAlumni = [
   {
@@ -210,18 +212,86 @@ export function AlumniDirectory() {
     location: "all",
     mentorAvailable: false
   });
+  const [audience, setAudience] = useState<"alumni" | "students">("alumni");
+  const [people, setPeople] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, any>>({});
 
-  const filteredAlumni = mockAlumni.filter(alumni => {
-    const matchesSearch = alumni.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         alumni.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         alumni.skills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    const matchesYear = filters.year === "all" || alumni.graduationYear.toString() === filters.year;
+  useEffect(() => {
+    const qUsers = query(collection(db, "users"));
+    const unsub = onSnapshot(qUsers, (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setPeople(list);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const qProfiles = query(collection(db, "profiles"));
+    const unsubProfiles = onSnapshot(qProfiles, (snap) => {
+      const map: Record<string, any> = {};
+      snap.docs.forEach((d) => {
+        map[d.id] = d.data();
+      });
+      setProfiles(map);
+    });
+    return () => unsubProfiles();
+  }, []);
+
+  const items = useMemo(() => {
+    const all = (people.length ? people : []).map((u: any) => {
+      const p = profiles[u.id] || {};
+      return {
+        id: u.id,
+        name: p.name || u.name || u.fullName || "Unnamed",
+        avatar: p.avatar || p.photoURL || u.avatar || u.photoURL || "",
+        company: p.company || u.company || u.employer || "",
+        role: p.role || p.title || u.title || u.roleTitle || u.role || "",
+        graduationYear: p.graduationYear || u.graduationYear || u.gradYear || "",
+        department: p.department || u.department || u.dept || "",
+        location: p.location || p.city || u.location || u.city || "",
+        skills: Array.isArray(p.skills) ? p.skills : (Array.isArray(u.skills) ? u.skills : []),
+        mentorAvailable: p.mentorAvailable ?? !!u.mentorAvailable,
+        linkedinSynced: p.linkedinSynced ?? !!u.linkedinSynced,
+        rating: p.rating ?? (u.rating || 0),
+        mentoringSessions: p.mentoringSessions ?? (u.mentoringSessions || 0),
+        isCurrentStudent: (p.isCurrentStudent ?? u.isCurrentStudent) ? true : (u.role === 'student'),
+        roleCategory: (p.role === 'student' || p.isCurrentStudent || u.role === 'student' || u.isCurrentStudent) ? 'student' : 'alumni',
+      };
+    });
+    const mockMapped = mockAlumni.map((m: any) => ({
+      id: `mock-${m.id}`,
+      name: m.name,
+      avatar: m.avatar,
+      company: m.company,
+      role: m.role,
+      graduationYear: m.graduationYear,
+      department: m.department,
+      location: m.location,
+      skills: m.skills || [],
+      mentorAvailable: !!m.mentorAvailable,
+      linkedinSynced: !!m.linkedinSynced,
+      rating: m.rating || 0,
+      mentoringSessions: m.mentoringSessions || 0,
+      isCurrentStudent: false,
+      roleCategory: 'alumni',
+    }));
+    return [...all, ...mockMapped];
+  }, [people, profiles]);
+
+  const filteredAlumni = items.filter((alumni: any) => {
+    const matchAudience = audience === 'alumni' ? alumni.roleCategory === 'alumni' : (alumni.isCurrentStudent || alumni.roleCategory === 'student');
+
+    const matchesSearch = (alumni.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (alumni.company || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (Array.isArray(alumni.skills) ? alumni.skills : []).some((skill: string) => (skill || "").toLowerCase().includes(searchQuery.toLowerCase()));
+    const yearStr = alumni.graduationYear ? alumni.graduationYear.toString() : "";
+    const matchesYear = filters.year === "all" || yearStr === filters.year;
     const matchesDepartment = filters.department === "all" || alumni.department === filters.department;
-    const matchesLocation = filters.location === "all" || alumni.location.includes(filters.location);
-    const matchesMentor = !filters.mentorAvailable || alumni.mentorAvailable;
+    const locationStr = alumni.location || "";
+    const matchesLocation = filters.location === "all" || locationStr.includes(filters.location);
+    const matchesMentor = !filters.mentorAvailable || !!alumni.mentorAvailable;
 
-    return matchesSearch && matchesYear && matchesDepartment && matchesLocation && matchesMentor;
+    return matchAudience && matchesSearch && matchesYear && matchesDepartment && matchesLocation && matchesMentor;
   });
 
   return (
@@ -230,7 +300,7 @@ export function AlumniDirectory() {
       <div className="space-y-2">
         <h1 className="text-3xl font-bold">Alumni Directory</h1>
         <p className="text-muted-foreground">
-          Connect with {mockAlumni.length.toLocaleString()} alumni from your university
+          Connect with {(items.length).toLocaleString()} people from your university
         </p>
       </div>
 
@@ -246,6 +316,10 @@ export function AlumniDirectory() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
+            </div>
+            <div className="flex gap-2">
+              <Button variant={audience === 'alumni' ? "default" : "outline"} onClick={() => setAudience('alumni')}>Alumni</Button>
+              <Button variant={audience === 'students' ? "default" : "outline"} onClick={() => setAudience('students')}>Current Students</Button>
             </div>
             <Button variant="outline" className="gap-2">
               <Filter className="h-4 w-4" />
@@ -314,7 +388,7 @@ export function AlumniDirectory() {
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <p className="text-sm text-muted-foreground">
-            Showing {filteredAlumni.length} of {mockAlumni.length} alumni
+            Showing {filteredAlumni.length} of {items.length} people
           </p>
           <Select defaultValue="relevance">
             <SelectTrigger className="w-48">
@@ -330,8 +404,11 @@ export function AlumniDirectory() {
           </Select>
         </div>
 
+        {filteredAlumni.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground">No results match your filters.</div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredAlumni.map((alumni) => (
+          {filteredAlumni.map((alumni: any) => (
             <Card key={alumni.id} className="hover:shadow-md transition-shadow cursor-pointer group">
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-start gap-4">
@@ -359,7 +436,7 @@ export function AlumniDirectory() {
                     </div>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <GraduationCap className="h-3 w-3" />
-                      {alumni.department} '&apos;{alumni.graduationYear.toString().slice(-2)}
+                      {alumni.department} &apos;{String(alumni.graduationYear || "").slice(-2)}
                     </div>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <MapPin className="h-3 w-3" />
@@ -415,7 +492,9 @@ export function AlumniDirectory() {
             </Card>
           ))}
         </div>
+        )}
       </div>
     </div>
+    
   );
 }
