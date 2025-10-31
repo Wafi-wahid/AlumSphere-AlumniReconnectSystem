@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import { collection, doc, setDoc, serverTimestamp, onSnapshot, updateDoc, deleteDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { useAuth } from "@/store/auth";
@@ -56,7 +57,9 @@ export function AdminDashboard() {
   const [count, setCount] = useState(100);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [search, setSearch] = useState("");
-  const [visibleCount, setVisibleCount] = useState(20);
+  const [visibilityFilter, setVisibilityFilter] = useState<"all" | "visible" | "hidden">("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [usersCount, setUsersCount] = useState(0);
   const [creatingAdmin, setCreatingAdmin] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ name: "", email: "", password: "" });
@@ -94,6 +97,17 @@ export function AdminDashboard() {
     }
   };
   useEffect(() => { loadUsers(); }, []);
+  useEffect(() => {
+    const id = setInterval(loadUsers, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const ensureAuthReady = async () => {
+    if (auth.currentUser) return;
+    await new Promise<void>((resolve) => {
+      const unsub = onAuthStateChanged(auth, () => { unsub(); resolve(); });
+    });
+  };
 
   const startCrawlSeed = async () => {
     if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
@@ -101,6 +115,7 @@ export function AdminDashboard() {
       return;
     }
     try {
+      await ensureAuthReady();
       setSeeding(true);
       setProgress(0);
       const coll = collection(db, "profiles");
@@ -123,14 +138,25 @@ export function AdminDashboard() {
     }
   };
 
+  // Derived, filtered, paginated profiles
+  const filteredProfiles = profiles.filter((p) => {
+    const q = search.toLowerCase();
+    const matchesQuery = !q || (p.name || "").toLowerCase().includes(q) || (p.company || "").toLowerCase().includes(q) || (p.role || "").toLowerCase().includes(q);
+    const matchesVisibility = visibilityFilter === "all" || (visibilityFilter === "visible" ? p.visible !== false : p.visible === false);
+    return matchesQuery && matchesVisibility;
+  });
+  const totalPages = Math.max(1, Math.ceil(filteredProfiles.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageItems = filteredProfiles.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Admin Dashboard</h1>
       {/* Analytics */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardHeader><CardTitle>Total Users</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold">{usersCount}</CardContent>
+          <CardHeader><CardTitle>Total Users (Server)</CardTitle></CardHeader>
+          <CardContent className="text-2xl font-bold">{users.length}</CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle>Total Profiles</CardTitle></CardHeader>
@@ -222,7 +248,7 @@ export function AdminDashboard() {
             <CardTitle>Profiles Management</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant={Object.values(selected).some(Boolean) ? "destructive" : "outline"}
                 onClick={async () => {
@@ -267,21 +293,31 @@ export function AdminDashboard() {
                   }
                 }}
               >Delete Selected</Button>
-              <Input placeholder="Search name, company, role..." value={search} onChange={(e) => { setSearch(e.target.value); setVisibleCount(20); }} />
-              <Button variant="outline" onClick={() => setVisibleCount((c) => c + 20)}>Load more</Button>
+              <Input placeholder="Search name, company, role..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+              <Select value={visibilityFilter} onValueChange={(v) => { setVisibilityFilter(v as any); setPage(1); }}>
+                <SelectTrigger className="w-36"><SelectValue placeholder="Visibility" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="visible">Visible</SelectItem>
+                  <SelectItem value="hidden">Hidden</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(parseInt(v, 10)); setPage(1); }}>
+                <SelectTrigger className="w-28"><SelectValue placeholder="Page size" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 / page</SelectItem>
+                  <SelectItem value="20">20 / page</SelectItem>
+                  <SelectItem value="50">50 / page</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="ml-auto flex items-center gap-2">
+                <Button variant="outline" disabled={currentPage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
+                <div className="text-sm">Page {currentPage} / {totalPages}</div>
+                <Button variant="outline" disabled={currentPage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</Button>
+              </div>
             </div>
             <div className="space-y-2 max-h-[420px] overflow-auto pr-2">
-              {profiles
-                .filter((p) => {
-                  const q = search.toLowerCase();
-                  if (!q) return true;
-                  return (
-                    (p.name || "").toLowerCase().includes(q) ||
-                    (p.company || "").toLowerCase().includes(q) ||
-                    (p.role || "").toLowerCase().includes(q)
-                  );
-                })
-                .slice(0, visibleCount)
+              {pageItems
                 .map((p) => (
                   <div key={p.id} className="flex items-start justify-between rounded border p-2 gap-2">
                     <div className="flex items-start gap-2 min-w-0">

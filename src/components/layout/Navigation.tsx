@@ -19,7 +19,7 @@ const navigationItems = [
   { id: "community", label: "Community", icon: MessageCircleIcon, roles: ["all"] },
   { id: "messages", label: "Messages", icon: MessageCircleIcon, roles: ["all"] },
   { id: "fame", label: "Hall of Fame", icon: Award, roles: ["all"] },
-  { id: "dashboard", label: "Dashboard", icon: BarChart3, roles: ["admin", "faculty"] },
+  { id: "dashboard", label: "Dashboard", icon: BarChart3, roles: ["admin", "super_admin", "faculty"] },
 ];
 
 export function Navigation({ activeTab, onTabChange, userRole, className }: NavigationProps) {
