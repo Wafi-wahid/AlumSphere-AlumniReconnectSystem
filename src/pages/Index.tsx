@@ -12,6 +12,7 @@ import { MessagesPage } from "@/components/messages/MessagesPage";
 import { FameHub } from "@/components/fame/FameHub";
 import Profile from "@/pages/Profile";
 import { useAuth } from "@/store/auth";
+import { AdminDashboard } from "@/components/admin/AdminDashboard";
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -66,10 +67,7 @@ const Index = () => {
         return <FameHub />;
       case "dashboard":
         return user?.role === 'admin' || user?.role === 'super_admin' ? (
-          <div className="space-y-6">
-            <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-            <p className="text-muted-foreground">Analytics and management tools (Coming soon)</p>
-          </div>
+          <AdminDashboard />
         ) : (
           <HomePage user={user} onNavigate={setActiveTab} />
         );

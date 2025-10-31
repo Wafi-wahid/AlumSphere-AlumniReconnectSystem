@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { GraduationCap, Linkedin, Building2, UserCheck, Shield } from "lucide-react";
+import { GraduationCap, Linkedin } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { toast } from "sonner";
 
@@ -33,12 +33,7 @@ export function LoginPage() {
     }, 1500);
   };
 
-  const mockUsers = [
-    { name: "Student", role: "student", icon: GraduationCap, color: "bg-blue-500" },
-    { name: "Alumni", role: "alumni", icon: UserCheck, color: "bg-green-500" },
-    { name: "Recruiter", role: "recruiter", icon: Building2, color: "bg-purple-500" },
-    { name: "Admin", role: "admin", icon: Shield, color: "bg-orange-500" },
-  ];
+  // Demo roles removed
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/20 flex items-center justify-center p-4">
@@ -118,38 +113,7 @@ export function LoginPage() {
               University SSO Login
             </Button>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">Demo Roles</span>
-              </div>
-            </div>
-
-            {/* Demo Role Selection */}
-            <div className="grid grid-cols-2 gap-3">
-              {mockUsers.map((user) => {
-                const Icon = user.icon;
-                return (
-                  <Button
-                    key={user.role}
-                    variant="soft"
-                    className="h-16 flex-col gap-2 transition-transform hover:scale-[1.02]"
-                    onClick={() => {
-                      setIsLoading(true);
-                      setTimeout(() => { setIsLoading(false); toast.info('Demo mode disabled'); }, 800);
-                    }}
-                    disabled={isLoading}
-                  >
-                    <div className={`${user.color} w-6 h-6 rounded-full flex items-center justify-center`}>
-                      <Icon className="h-3 w-3 text-white" />
-                    </div>
-                    <span className="text-xs">{user.name}</span>
-                  </Button>
-                );
-              })}
-            </div>
+            {/* Demo roles removed */}
           </CardContent>
           <CardFooter>
             <p className="text-xs text-center text-muted-foreground w-full">

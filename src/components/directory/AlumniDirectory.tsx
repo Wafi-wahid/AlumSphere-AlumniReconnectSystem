@@ -215,6 +215,7 @@ export function AlumniDirectory() {
   const [audience, setAudience] = useState<"alumni" | "students">("alumni");
   const [people, setPeople] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
+  const [visibleCount, setVisibleCount] = useState(24);
 
   useEffect(() => {
     const qUsers = query(collection(db, "users"));
@@ -256,8 +257,30 @@ export function AlumniDirectory() {
         mentoringSessions: p.mentoringSessions ?? (u.mentoringSessions || 0),
         isCurrentStudent: (p.isCurrentStudent ?? u.isCurrentStudent) ? true : (u.role === 'student'),
         roleCategory: (p.role === 'student' || p.isCurrentStudent || u.role === 'student' || u.isCurrentStudent) ? 'student' : 'alumni',
+        visible: p.visible,
       };
     });
+    const peopleIds = new Set((people || []).map((u: any) => u.id));
+    const extraProfiles = Object.entries(profiles || {})
+      .filter(([pid]) => !peopleIds.has(pid))
+      .map(([pid, p]: any) => ({
+        id: pid,
+        name: p.name || "Unnamed",
+        avatar: p.avatar || p.photoURL || "",
+        company: p.company || "",
+        role: p.role || p.title || "",
+        graduationYear: p.graduationYear || "",
+        department: p.department || "",
+        location: p.location || p.city || "",
+        skills: Array.isArray(p.skills) ? p.skills : [],
+        mentorAvailable: !!p.mentorAvailable,
+        linkedinSynced: !!p.linkedinSynced,
+        rating: p.rating || 0,
+        mentoringSessions: p.mentoringSessions || 0,
+        isCurrentStudent: !!p.isCurrentStudent,
+        roleCategory: (p.role === 'student' || p.isCurrentStudent) ? 'student' : 'alumni',
+        visible: p.visible,
+      }));
     const mockMapped = mockAlumni.map((m: any) => ({
       id: `mock-${m.id}`,
       name: m.name,
@@ -275,10 +298,12 @@ export function AlumniDirectory() {
       isCurrentStudent: false,
       roleCategory: 'alumni',
     }));
-    return [...all, ...mockMapped];
+    return [...all, ...extraProfiles, ...mockMapped];
   }, [people, profiles]);
 
   const filteredAlumni = items.filter((alumni: any) => {
+    const isVisible = alumni.visible !== false; // default to visible when undefined
+    if (!isVisible) return false;
     const matchAudience = audience === 'alumni' ? alumni.roleCategory === 'alumni' : (alumni.isCurrentStudent || alumni.roleCategory === 'student');
 
     const matchesSearch = (alumni.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -293,6 +318,12 @@ export function AlumniDirectory() {
 
     return matchAudience && matchesSearch && matchesYear && matchesDepartment && matchesLocation && matchesMentor;
   });
+
+  const visibleAlumni = useMemo(() => filteredAlumni.slice(0, visibleCount), [filteredAlumni, visibleCount]);
+
+  useEffect(() => {
+    setVisibleCount(24);
+  }, [searchQuery, filters, audience]);
 
   return (
     <div className="space-y-6">
@@ -407,8 +438,9 @@ export function AlumniDirectory() {
         {filteredAlumni.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">No results match your filters.</div>
         ) : (
+        <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredAlumni.map((alumni: any) => (
+          {visibleAlumni.map((alumni: any) => (
             <Card key={alumni.id} className="hover:shadow-md transition-shadow cursor-pointer group">
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-start gap-4">
@@ -492,6 +524,12 @@ export function AlumniDirectory() {
             </Card>
           ))}
         </div>
+        {filteredAlumni.length > visibleCount && (
+          <div className="flex justify-center">
+            <Button variant="outline" onClick={() => setVisibleCount((c) => c + 24)}>Load more</Button>
+          </div>
+        )}
+        </>
         )}
       </div>
     </div>
