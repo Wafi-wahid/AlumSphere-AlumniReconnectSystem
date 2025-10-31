@@ -3,9 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { db } from "@/lib/firebase";
-import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, setDoc, serverTimestamp, onSnapshot, updateDoc, deleteDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { useAuth } from "@/store/auth";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 function randomFrom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -50,6 +52,18 @@ export function AdminDashboard() {
   const [seeding, setSeeding] = useState(false);
   const [progress, setProgress] = useState(0);
   const [count, setCount] = useState(100);
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(20);
+
+  // Realtime profiles feed
+  useState(() => {
+    const unsub = onSnapshot(collection(db, "profiles"), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setProfiles(list);
+    });
+    return () => unsub();
+  });
 
   const startCrawlSeed = async () => {
     if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
@@ -111,6 +125,78 @@ export function AdminDashboard() {
                 <div className="text-xs text-muted-foreground">{progress}%</div>
               </div>
             )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Profiles Management</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Input placeholder="Search name, company, role..." value={search} onChange={(e) => { setSearch(e.target.value); setVisibleCount(20); }} />
+              <Button variant="outline" onClick={() => setVisibleCount((c) => c + 20)}>Load more</Button>
+            </div>
+            <div className="space-y-2 max-h-[420px] overflow-auto pr-2">
+              {profiles
+                .filter((p) => {
+                  const q = search.toLowerCase();
+                  if (!q) return true;
+                  return (
+                    (p.name || "").toLowerCase().includes(q) ||
+                    (p.company || "").toLowerCase().includes(q) ||
+                    (p.role || "").toLowerCase().includes(q)
+                  );
+                })
+                .slice(0, visibleCount)
+                .map((p) => (
+                  <div key={p.id} className="flex items-center justify-between rounded border p-2">
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{p.name || 'Unnamed'}</div>
+                      <div className="text-xs text-muted-foreground truncate">{p.role || '—'} · {p.company || '—'} · {p.location || '—'}</div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {(Array.isArray(p.skills) ? p.skills.slice(0, 4) : []).map((s: string) => (
+                          <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={p.visible === false ? 'destructive' : 'secondary'} className="text-[10px]">{p.visible === false ? 'Hidden' : 'Visible'}</Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            await updateDoc(doc(db, 'profiles', p.id), { visible: !(p.visible !== false) });
+                            toast.success(p.visible === false ? 'Profile set visible' : 'Profile hidden');
+                          } catch (e: any) {
+                            toast.error(e.message || 'Update failed');
+                          }
+                        }}
+                      >
+                        {p.visible === false ? 'Show' : 'Hide'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={async () => {
+                          if (!confirm('Delete this profile?')) return;
+                          try {
+                            await deleteDoc(doc(db, 'profiles', p.id));
+                            toast.success('Deleted');
+                          } catch (e: any) {
+                            toast.error(e.message || 'Delete failed');
+                          }
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              {profiles.length === 0 && (
+                <div className="text-sm text-muted-foreground">No profiles yet</div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

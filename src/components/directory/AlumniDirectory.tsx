@@ -257,6 +257,7 @@ export function AlumniDirectory() {
         mentoringSessions: p.mentoringSessions ?? (u.mentoringSessions || 0),
         isCurrentStudent: (p.isCurrentStudent ?? u.isCurrentStudent) ? true : (u.role === 'student'),
         roleCategory: (p.role === 'student' || p.isCurrentStudent || u.role === 'student' || u.isCurrentStudent) ? 'student' : 'alumni',
+        visible: p.visible,
       };
     });
     const peopleIds = new Set((people || []).map((u: any) => u.id));
@@ -278,6 +279,7 @@ export function AlumniDirectory() {
         mentoringSessions: p.mentoringSessions || 0,
         isCurrentStudent: !!p.isCurrentStudent,
         roleCategory: (p.role === 'student' || p.isCurrentStudent) ? 'student' : 'alumni',
+        visible: p.visible,
       }));
     const mockMapped = mockAlumni.map((m: any) => ({
       id: `mock-${m.id}`,
@@ -300,6 +302,8 @@ export function AlumniDirectory() {
   }, [people, profiles]);
 
   const filteredAlumni = items.filter((alumni: any) => {
+    const isVisible = alumni.visible !== false; // default to visible when undefined
+    if (!isVisible) return false;
     const matchAudience = audience === 'alumni' ? alumni.roleCategory === 'alumni' : (alumni.isCurrentStudent || alumni.roleCategory === 'student');
 
     const matchesSearch = (alumni.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
