@@ -7,6 +7,8 @@ import fs from 'fs';
 import { authRouter } from './routes/auth';
 import { adminRouter } from './routes/admin';
 import { userRouter } from './routes/users';
+import { prisma } from './prisma';
+import bcrypt from 'bcryptjs';
 
 const app = express();
 
@@ -69,6 +71,45 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
-});
+async function bootstrapSuperAdmin() {
+  const email = process.env.SUPER_ADMIN_EMAIL;
+  const password = process.env.SUPER_ADMIN_PASSWORD;
+  const name = process.env.SUPER_ADMIN_NAME || 'Super Admin';
+  if (!email || !password) {
+    if (isDev) {
+      console.warn('[bootstrap] SUPER_ADMIN_EMAIL or SUPER_ADMIN_PASSWORD not set; skipping super admin bootstrap');
+    }
+    return;
+  }
+  const existing = await prisma.user.findUnique({ where: { email } });
+  const passwordHash = await bcrypt.hash(password, 10);
+  if (!existing) {
+    await prisma.user.create({
+      data: { name, email, passwordHash, role: 'super_admin' },
+    });
+    console.log(`[bootstrap] Created super_admin ${email}`);
+    return;
+  }
+  if (existing.role !== 'super_admin' || process.env.SUPER_ADMIN_RESET === '1') {
+    await prisma.user.update({
+      where: { email },
+      data: {
+        role: 'super_admin',
+        ...(process.env.SUPER_ADMIN_RESET === '1' ? { passwordHash } : {}),
+      },
+    });
+    console.log(`[bootstrap] Ensured super_admin role for ${email}${process.env.SUPER_ADMIN_RESET === '1' ? ' and reset password' : ''}`);
+  }
+}
+
+(async () => {
+  try {
+    await bootstrapSuperAdmin();
+  } catch (e) {
+    console.error('[bootstrap] Super admin error', e);
+  } finally {
+    app.listen(PORT, () => {
+      console.log(`Server listening on http://localhost:${PORT}`);
+    });
+  }
+})();
