@@ -32,7 +32,7 @@ const Index = () => {
     }
     const saved = localStorage.getItem('preferredTab');
     if (saved) setActiveTab(saved);
-    else setActiveTab(user.role === 'admin' ? 'dashboard' : 'home');
+    else setActiveTab(user.role === 'admin' || user.role === 'super_admin' ? 'dashboard' : 'home');
   }, [user]);
 
   // React to URL ?tab=... to keep UI consistent without full route change
@@ -44,11 +44,20 @@ const Index = () => {
     }
   }, [location.search]);
 
+  // Central handler: update state and URL so effects don't fight each other
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(location.search);
+    params.set('tab', tab);
+    navigate({ pathname: "/", search: `?${params.toString()}` });
+    localStorage.setItem('preferredTab', tab);
+  };
+
 
   const renderContent = () => {
     switch (activeTab) {
       case "home":
-        return <HomePage user={user} onNavigate={setActiveTab} />;
+        return <HomePage user={user} onNavigate={handleTabChange} />;
       case "directory":
         return <AlumniDirectory />;
       case "mentorship":
@@ -69,10 +78,10 @@ const Index = () => {
         return user?.role === 'admin' || user?.role === 'super_admin' ? (
           <AdminDashboard />
         ) : (
-          <HomePage user={user} onNavigate={setActiveTab} />
+          <HomePage user={user} onNavigate={handleTabChange} />
         );
       default:
-        return <HomePage user={user} onNavigate={setActiveTab} />;
+        return <HomePage user={user} onNavigate={handleTabChange} />;
     }
   };
 
@@ -92,7 +101,7 @@ const Index = () => {
         `}>
           <Navigation
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={handleTabChange}
             userRole={user.role}
             className="h-full"
           />

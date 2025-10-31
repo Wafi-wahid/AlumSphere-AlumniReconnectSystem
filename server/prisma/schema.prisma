@@ -15,6 +15,7 @@ model User {
   email            String   @unique
   passwordHash     String
   role             String   // one of: student | alumni | admin | super_admin
+  adminCategory    String?  // optional: open_house | fyp | general
   sapId            String?  @unique
   batchSeason      String?  // Spring/Fall
   batchYear        Int?
