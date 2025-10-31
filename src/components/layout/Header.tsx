@@ -36,6 +36,11 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
   const [conversations, setConversations] = useState<any[]>([]);
   const lastUpdatesRef = useRef<Record<string, number>>({});
   const [notifications, setNotifications] = useState<Array<{ id: string; title: string; body?: string; convId?: string; createdAt: number }>>([]);
+  const [incomingCall, setIncomingCall] = useState<null | { convId: string; type: 'audio' | 'video'; fromName: string; toName?: string }>(null);
+  const ringCtxRef = useRef<AudioContext | null>(null);
+  const ringOscRef = useRef<OscillatorNode | null>(null);
+  const ringGainRef = useRef<GainNode | null>(null);
+  const [userInteracted, setUserInteracted] = useState(false);
 
   // Subscribe to my conversations for header dropdown and notifications
   useEffect(() => {
@@ -70,9 +75,72 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
         }
         if (ts > prev) lastUpdatesRef.current[c.id] = ts;
       });
+
+      // Derive incoming call banner from current snapshot to avoid stale state
+      const ringing = list.find((c: any) => c?.call?.status === 'ringing' && c?.call?.toId === user?.id);
+      if (ringing) {
+        const otherId = (ringing.participants || []).find((p: string) => p !== user?.id);
+        const toName = ringing.participantNames?.[otherId || ''] || 'Conversation';
+        setIncomingCall({ convId: ringing.id, type: ringing.call?.type || 'audio', fromName: ringing.call?.fromName || 'Unknown', toName });
+      } else {
+        setIncomingCall(null);
+      }
     });
     return () => unsub();
   }, [user?.id]);
+
+  // Ringtone control
+  useEffect(() => {
+    // Track first user gesture to enable audio
+    const onInteract = () => {
+      setUserInteracted(true);
+      // try resuming any suspended audio context
+      try { ringCtxRef.current && (ringCtxRef.current.state === 'suspended') && ringCtxRef.current.resume(); } catch {}
+      window.removeEventListener('pointerdown', onInteract);
+    };
+    window.addEventListener('pointerdown', onInteract, { once: true });
+    
+    const stop = () => {
+      try {
+        ringGainRef.current?.gain?.exponentialRampToValueAtTime(0.0001, (ringCtxRef.current as any)?.currentTime + 0.2);
+      } catch {}
+      setTimeout(() => {
+        try { ringOscRef.current?.stop(); } catch {}
+        try { ringOscRef.current?.disconnect(); } catch {}
+        try { ringGainRef.current?.disconnect(); } catch {}
+        try { ringCtxRef.current?.close(); } catch {}
+        ringOscRef.current = null;
+        ringGainRef.current = null;
+        ringCtxRef.current = null;
+      }, 220);
+    };
+    const start = async () => {
+      if (ringCtxRef.current) return; // already ringing
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 850; // ring tone freq
+        gain.gain.value = 0.0001; // start silent
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        // simple pulsing envelope
+        gain.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 0.05);
+        const interval = setInterval(() => {
+          if (!ringCtxRef.current) { clearInterval(interval); return; }
+          const t = ctx.currentTime;
+          gain.gain.setValueAtTime(0.05, t);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+        }, 800);
+        ringCtxRef.current = ctx;
+        ringOscRef.current = osc;
+        ringGainRef.current = gain as any;
+      } catch {}
+    };
+    if (incomingCall && userInteracted) start(); else stop();
+    return () => { /* no-op */ };
+  }, [incomingCall, userInteracted]);
 
   const goMessages = () => navigate({ pathname: "/", search: "?tab=messages" });
   const openConversation = (c: any) => {
@@ -232,6 +300,25 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
           </div>
         )}
       </div>
+      {incomingCall && (
+        <div className="w-full border-t bg-primary/10 transition-all duration-300 transform translate-y-0 opacity-100">
+          <div className="container mx-auto px-4 py-2 flex items-center justify-between gap-3">
+            <div className="text-sm">
+              <span className="font-medium">Incoming {incomingCall.type} call</span>
+              <span className="mx-1">from</span>
+              <span className="font-semibold">{incomingCall.fromName}</span>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="default" onClick={() => { setIncomingCall(null); navigate({ pathname: "/", search: `?tab=messages&convId=${incomingCall.convId}&action=acceptCall` }); }}>
+                Accept
+              </Button>
+              <Button size="sm" variant="destructive" onClick={() => { setIncomingCall(null); navigate({ pathname: "/", search: `?tab=messages&convId=${incomingCall.convId}&action=declineCall` }); }}>
+                Decline
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
