@@ -153,25 +153,28 @@ export function AdminDashboard() {
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Admin Dashboard</h1>
       {/* Analytics */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader><CardTitle>Total Users (Server)</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold">{users.length}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Total Profiles</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold">{profiles.length}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Visible Profiles</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold">{profiles.filter(p => p.visible !== false).length}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Hidden Profiles</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold">{profiles.filter(p => p.visible === false).length}</CardContent>
-        </Card>
-      </div>
+      {user?.role === 'super_admin' && (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader><CardTitle>Total Users (Server)</CardTitle></CardHeader>
+            <CardContent className="text-2xl font-bold">{users.length}</CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Total Profiles</CardTitle></CardHeader>
+            <CardContent className="text-2xl font-bold">{profiles.length}</CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Visible Profiles</CardTitle></CardHeader>
+            <CardContent className="text-2xl font-bold">{profiles.filter(p => p.visible !== false).length}</CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Hidden Profiles</CardTitle></CardHeader>
+            <CardContent className="text-2xl font-bold">{profiles.filter(p => p.visible === false).length}</CardContent>
+          </Card>
+        </div>
+      )}
 
+      {user?.role === 'super_admin' && (
       <div className="grid md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -241,6 +244,7 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+      )}
 
       <div className="grid md:grid-cols-2 gap-6">
         <Card>
@@ -396,6 +400,7 @@ export function AdminDashboard() {
             </div>
           </CardContent>
         </Card>
+        {user?.role === 'super_admin' && (
         <Card>
           <CardHeader>
             <CardTitle>Users & Roles</CardTitle>
@@ -449,6 +454,7 @@ export function AdminDashboard() {
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
     </div>
   );
