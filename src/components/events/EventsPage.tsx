@@ -10,11 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/store/auth";
 import { db } from "@/lib/firebase";
-import { addDoc, collection, onSnapshot, query, setDoc, doc, collectionGroup, getDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, onSnapshot, query, setDoc, doc, collectionGroup, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
 import { collection as fsCollection, addDoc as fsAddDoc } from "firebase/firestore";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const mockEvents = [
   {
@@ -30,7 +31,8 @@ const mockEvents = [
     maxAttendees: 500,
     category: "Career",
     description: "Join alumni from Google, Meta, and Amazon as they share their journey and tips for landing your dream tech job.",
-    rsvpStatus: null
+    rsvpStatus: null,
+    awaitingHost: false
   },
   {
     id: 2,
@@ -45,7 +47,8 @@ const mockEvents = [
     maxAttendees: 200,
     category: "Networking",
     description: "Connect with fellow alumni across various industries. Food and beverages will be provided.",
-    rsvpStatus: null
+    rsvpStatus: null,
+    awaitingHost: false
   },
   {
     id: 3,
@@ -60,7 +63,8 @@ const mockEvents = [
     maxAttendees: 300,
     category: "Entrepreneurship",
     description: "Learn from successful alumni entrepreneurs about building and scaling startups.",
-    rsvpStatus: null
+    rsvpStatus: null,
+    awaitingHost: false
   },
   {
     id: 4,
@@ -75,7 +79,8 @@ const mockEvents = [
     maxAttendees: 100,
     category: "Technical",
     description: "Hands-on workshop covering Python, ML basics, and real-world data science projects.",
-    rsvpStatus: null
+    rsvpStatus: null,
+    awaitingHost: false
   }
 ];
 
@@ -119,6 +124,10 @@ export function EventsPage() {
   const [selectedProfile, setSelectedProfile] = useState<any | null>(null);
   const [matchedProfile, setMatchedProfile] = useState<any | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [activeInvite, setActiveInvite] = useState<any | null>(null);
+  const [adminTab, setAdminTab] = useState<'create'|'manage'>('create');
+  const [myRsvpEventIds, setMyRsvpEventIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const unsub = onSnapshot(query(collection(db, "events")), (snap) => {
@@ -152,7 +161,22 @@ export function EventsPage() {
         })(),
       })) as Array<any>;
       mapped.sort((a, b) => a._sortKey - b._sortKey);
-      setEvents([...mapped.map(({ _sortKey, ...rest }) => rest), ...mockEvents]);
+      const normalizedMock = mockEvents.map((m) => ({ ...m, awaitingHost: false }));
+      setEvents([...mapped.map(({ _sortKey, ...rest }) => rest), ...normalizedMock]);
+    });
+    return () => unsub();
+  }, [myInvites, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsub = onSnapshot(collectionGroup(db, 'rsvps'), (snap) => {
+      const mine = snap.docs.filter((d) => d.id === user.id);
+      const ids = new Set<string>();
+      for (const d of mine) {
+        const parentEventRef = d.ref.parent.parent;
+        if (parentEventRef) ids.add(parentEventRef.id);
+      }
+      setMyRsvpEventIds(ids);
     });
     return () => unsub();
   }, [user?.id]);
@@ -259,27 +283,31 @@ export function EventsPage() {
   const createConversationAndInvite = async (profile: any) => {
     const me = user?.id;
     if (!me) throw new Error("No user");
-    const convRef = await addDoc(fsCollection(db, "conversations"), {
-      participants: [me, profile.id],
-      participantNames: { [me]: user?.name || "Me", [profile.id]: profile.name || "Alumni" },
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    const other = String(profile.id);
+    const convKey = [me, other].sort().join(":");
+    const convRef = doc(db, "conversations", convKey);
+    const text = newEvent.messageTemplate
+      .replace("{name}", profile.name || "")
+      .replace("{topic}", newEvent.topic)
+      .replace("{category}", newEvent.category || newEvent.categoryOther);
+    await setDoc(convRef, {
+      participants: [me, other],
+      participantNames: { [me]: user?.name || "Me", [other]: profile.name || "Alumni" },
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
       lastSenderId: me,
       lastSenderName: user?.name || "Admin",
-      lastMessage: newEvent.messageTemplate
-        .replace("{name}", profile.name || "")
-        .replace("{topic}", newEvent.topic)
-        .replace("{category}", newEvent.category || newEvent.categoryOther),
-    });
-    await fsAddDoc(fsCollection(db, "conversations", convRef.id, "messages"), {
+      lastMessage: text,
+    }, { merge: true });
+    await addDoc(collection(convRef, "messages"), {
       senderId: me,
-      text: newEvent.messageTemplate
-        .replace("{name}", profile.name || "")
-        .replace("{topic}", newEvent.topic)
-        .replace("{category}", newEvent.category || newEvent.categoryOther),
-      createdAt: new Date(),
+      senderName: user?.name || "Admin",
+      type: 'host_invite',
+      eventId: null,
+      text,
+      createdAt: serverTimestamp(),
     });
-    return convRef.id;
+    return convKey;
   };
 
   const handleCreateEvent = async () => {
@@ -410,12 +438,20 @@ export function EventsPage() {
       {(user?.role === "admin" || user?.role === "super_admin") && (
         <Card>
           <CardHeader>
-            <CardTitle>Create Event</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Admin</CardTitle>
+              <div className="inline-flex rounded border">
+                <Button size="sm" variant={adminTab==='create'?'default':'ghost'} onClick={() => setAdminTab('create')}>Create Event</Button>
+                <Button size="sm" variant={adminTab==='manage'?'default':'ghost'} onClick={() => setAdminTab('manage')}>Manage</Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm">Category</label>
+            {adminTab === 'create' && (
+              <>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm">Category</label>
                 <Select value={newEvent.category} onValueChange={(v) => setNewEvent({ ...newEvent, category: v })}>
                   <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>
@@ -548,16 +584,37 @@ export function EventsPage() {
               </div>
               <Textarea value={newEvent.messageTemplate} onChange={(e) => setNewEvent({ ...newEvent, messageTemplate: e.target.value })} />
             </div>
-            <Button onClick={handleCreateEvent} disabled={creating}>{creating ? "Creating..." : "Create Event"}</Button>
+            </>
+            )}
+            {adminTab==='create' && (
+              <Button onClick={handleCreateEvent} disabled={creating}>{creating ? "Creating..." : "Create Event"}</Button>
+            )}
+            {adminTab==='manage' && (
+              <div className="space-y-2">
+                {events.filter((e: any) => e.awaitingHost).length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No pending invites</div>
+                ) : (
+                  events.filter((e: any) => e.awaitingHost).map((e: any) => (
+                    <div key={e.id} className="flex items-center justify-between border rounded p-2">
+                      <div className="truncate">
+                        <div className="text-sm font-medium truncate">{e.title}</div>
+                        <div className="text-xs text-muted-foreground truncate">Host: {e.host} · {e.date} {e.time}</div>
+                      </div>
+                      <Badge variant="secondary">Awaiting host</Badge>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
       <Tabs defaultValue="upcoming" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
-          <TabsTrigger value="past">Past Events</TabsTrigger>
-          <TabsTrigger value="my-events">My Events (1)</TabsTrigger>
+          <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+          <TabsTrigger value="past">Past</TabsTrigger>
+          <TabsTrigger value="my-events">My Events</TabsTrigger>
         </TabsList>
 
         <TabsContent value="upcoming" className="space-y-4">
@@ -588,7 +645,10 @@ export function EventsPage() {
                               <p className="text-sm text-muted-foreground">Hosted by {event.host}</p>
                             </div>
                           </div>
-                          <Badge>{event.category}</Badge>
+                          <div className="flex items-center gap-2">
+                            {event.awaitingHost && <Badge variant="secondary">Awaiting host</Badge>}
+                            <Badge>{event.category}</Badge>
+                          </div>
                         </div>
                         <p className="text-sm text-muted-foreground">{event.description}</p>
                       </div>
@@ -676,35 +736,75 @@ export function EventsPage() {
         </TabsContent>
 
         <TabsContent value="my-events" className="space-y-4">
-          {myInvites.length === 0 ? (
-            <Card>
-              <CardContent className="p-6">
-                <p className="text-sm text-muted-foreground">No invitations yet</p>
-              </CardContent>
-            </Card>
-          ) : (
-            myInvites.map((e) => (
-              <Card key={e.id}>
-                <CardContent className="p-6 space-y-2">
-                  <div className="text-lg font-semibold">{e.title}</div>
-                  <div className="text-sm text-muted-foreground">Category: {e.category} · {e.date} {e.time} · {e.type} · {e.location}</div>
-                  <div className="text-sm">Invite status: <Badge>{e.inviteStatus}</Badge></div>
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <Button size="sm" onClick={async () => { await updateDoc(doc(db, e.inviteRefPath), { status: 'accepted', respondedAt: new Date() }); await updateDoc(doc(db, 'events', e.id), { hostAccepted: true }); toast.success('Accepted'); }}>Accept</Button>
-                    <Button size="sm" variant="outline" onClick={async () => { await updateDoc(doc(db, e.inviteRefPath), { status: 'declined', responseText: "Sorry, I can't make it", respondedAt: new Date() }); await updateDoc(doc(db, 'events', e.id), { hostAccepted: false }); toast.message('Declined', { description: "We'll notify the admin." }); }}>Decline</Button>
-                    <Button size="sm" variant="ghost" onClick={async () => { await updateDoc(doc(db, e.inviteRefPath), { status: 'referred', responseText: 'I can refer another alumni', respondedAt: new Date() }); await updateDoc(doc(db, 'events', e.id), { hostAccepted: false }); toast.message('Referred', { description: 'Thanks for the referral!' }); }}>Refer other alumni</Button>
-                    <div className="flex items-center gap-2">
-                      {e.responses.slice(0,3).map((r: string) => (
-                        <Button key={r} size="sm" variant="secondary" onClick={async () => { await updateDoc(doc(db, e.inviteRefPath), { status: 'responded', responseText: r, respondedAt: new Date() }); await updateDoc(doc(db, 'events', e.id), { hostAccepted: r.toLowerCase().includes('join') ? true : false }); toast.success('Response sent'); }}>{r}</Button>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
+          {/* RSVP'd events for this user */}
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Your RSVPs</div>
+            {events.filter((e: any) => myRsvpEventIds.has(String(e.id))).length === 0 ? (
+              <Card><CardContent className="p-4 text-sm text-muted-foreground">No RSVPs yet</CardContent></Card>
+            ) : (
+              events.filter((e: any) => myRsvpEventIds.has(String(e.id))).map((e: any) => (
+                <Card key={e.id}><CardContent className="p-4 flex items-center justify-between"><div className="truncate"><div className="text-sm font-medium truncate">{e.title}</div><div className="text-xs text-muted-foreground truncate">{e.date} {e.time} · {e.type} · {e.location}</div></div><Badge variant="secondary">RSVP'd</Badge></CardContent></Card>
+              ))
+            )}
+          </div>
+
+          {/* Host invitations for this user */}
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Your Invitations</div>
+            {myInvites.length === 0 ? (
+              <Card>
+                <CardContent className="p-4 text-sm text-muted-foreground">No invitations yet</CardContent>
               </Card>
-            ))
-          )}
+            ) : (
+              myInvites.map((e) => (
+                <Card key={e.id}>
+                  <CardContent className="p-6 space-y-2">
+                    <div className="text-lg font-semibold">{e.title}</div>
+                    <div className="text-sm text-muted-foreground">Category: {e.category} · {e.date} {e.time} · {e.type} · {e.location}</div>
+                    <div className="text-sm">Invite status: <Badge>{e.inviteStatus}</Badge></div>
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <Button size="sm" onClick={async () => { await updateDoc(doc(db, e.inviteRefPath), { status: 'accepted', respondedAt: new Date() }); await updateDoc(doc(db, 'events', e.id), { hostAccepted: true }); toast.success('Accepted'); }}>Accept</Button>
+                      <Button size="sm" variant="outline" onClick={async () => { await updateDoc(doc(db, e.inviteRefPath), { status: 'declined', responseText: "Sorry, I can't make it", respondedAt: new Date() }); await updateDoc(doc(db, 'events', e.id), { hostAccepted: false }); toast.message('Declined', { description: "We'll notify the admin." }); }}>Decline</Button>
+                      <Button size="sm" variant="ghost" onClick={async () => { await updateDoc(doc(db, e.inviteRefPath), { status: 'referred', responseText: 'I can refer another alumni', respondedAt: new Date() }); await updateDoc(doc(db, 'events', e.id), { hostAccepted: false }); toast.message('Referred', { description: 'Thanks for the referral!' }); }}>Refer other alumni</Button>
+                      <div className="flex items-center gap-2">
+                        {e.responses.slice(0,3).map((r: string) => (
+                          <Button key={r} size="sm" variant="secondary" onClick={async () => { await updateDoc(doc(db, e.inviteRefPath), { status: 'responded', responseText: r, respondedAt: new Date() }); await updateDoc(doc(db, 'events', e.id), { hostAccepted: r.toLowerCase().includes('join') ? true : false }); toast.success('Response sent'); }}>{r}</Button>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
         </TabsContent>
       </Tabs>
+
+      
+
+      {/* Invite popup for host */}
+      <Dialog open={inviteModalOpen} onOpenChange={setInviteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Event invitation</DialogTitle>
+          </DialogHeader>
+          {activeInvite && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium">{activeInvite.title}</div>
+              <div className="text-xs text-muted-foreground">{activeInvite.category} · {activeInvite.date} {activeInvite.time} · {activeInvite.type} · {activeInvite.location}</div>
+            </div>
+          )}
+          <DialogFooter className="flex gap-2 justify-end">
+            {activeInvite && (
+              <>
+                <Button size="sm" onClick={async () => { if (!activeInvite) return; await updateDoc(doc(db, activeInvite.inviteRefPath), { status: 'accepted', respondedAt: new Date() }); await updateDoc(doc(db, 'events', activeInvite.id), { hostAccepted: true }); setInviteModalOpen(false); toast.success('Accepted'); }}>Accept</Button>
+                <Button size="sm" variant="outline" onClick={async () => { if (!activeInvite) return; await updateDoc(doc(db, activeInvite.inviteRefPath), { status: 'declined', responseText: "Sorry, I can't make it", respondedAt: new Date() }); await updateDoc(doc(db, 'events', activeInvite.id), { hostAccepted: false }); setInviteModalOpen(false); toast.message('Declined'); }}>Decline</Button>
+                <Button size="sm" variant="ghost" onClick={async () => { if (!activeInvite) return; await updateDoc(doc(db, activeInvite.inviteRefPath), { status: 'referred', responseText: 'I can refer another alumni', respondedAt: new Date() }); await updateDoc(doc(db, 'events', activeInvite.id), { hostAccepted: false }); setInviteModalOpen(false); toast.message('Referred'); }}>Refer</Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {selectedEventId && (
         <Card>

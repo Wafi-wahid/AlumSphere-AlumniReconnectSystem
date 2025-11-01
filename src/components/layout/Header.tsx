@@ -1,4 +1,4 @@
-import { Bell, MessageSquare, User, Menu, GraduationCap } from "lucide-react";
+import { Bell, MessageSquare, User, Menu, GraduationCap, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,7 +15,7 @@ import { useAuth } from "@/store/auth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where, updateDoc, setDoc, doc, arrayUnion } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 interface HeaderProps {
@@ -159,6 +159,25 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     }
   };
   const clearNotifications = () => setNotifications([]);
+  const dismissNotification = (id: string) => setNotifications((prev) => prev.filter((n) => n.id !== id));
+  const [dismissedConvIds, setDismissedConvIds] = useState<Set<string>>(new Set());
+  // Load persisted header-dismissed conversations from profile
+  useEffect(() => {
+    if (!user?.id) return;
+    const prefRef = doc(db, 'profiles', user.id);
+    const unsub = onSnapshot(prefRef, (snap) => {
+      const data = (snap.data() as any) || {};
+      const arr: string[] = Array.isArray(data.headerDismissedConvIds) ? data.headerDismissedConvIds : [];
+      setDismissedConvIds(new Set(arr));
+    });
+    return () => unsub();
+  }, [user?.id]);
+  const dismissConversation = async (id: string) => {
+    setDismissedConvIds((prev) => new Set([...prev, id]));
+    try {
+      if (user?.id) await setDoc(doc(db, 'profiles', user.id), { headerDismissedConvIds: arrayUnion(id) }, { merge: true });
+    } catch {}
+  };
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b">
       <a
@@ -211,9 +230,20 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                 ) : (
                   <div className="max-h-80 overflow-auto">
                     {notifications.map((n) => (
-                      <DropdownMenuItem key={n.id} onClick={() => openNotification(n)} className="flex flex-col items-start gap-1">
-                        <div className="text-sm font-medium">{n.title}</div>
-                        {n.body && <div className="text-xs text-muted-foreground truncate w-full">{n.body}</div>}
+                      <DropdownMenuItem key={n.id} className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0" onClick={() => openNotification(n)}>
+                          <div className="text-sm font-medium truncate">{n.title}</div>
+                          {n.body && <div className="text-xs text-muted-foreground truncate w-full">{n.body}</div>}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0"
+                          onClick={(e) => { e.stopPropagation(); dismissNotification(n.id); }}
+                          aria-label="Dismiss notification"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
                       </DropdownMenuItem>
                     ))}
                   </div>
@@ -228,26 +258,37 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative">
                   <MessageSquare className="h-5 w-5" />
-                  {conversations.length > 0 && (
+                  {conversations.filter((c)=>!dismissedConvIds.has(c.id)).length > 0 && (
                     <Badge 
                       variant="destructive" 
                       className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs"
                     >
-                      {Math.min(conversations.length, 9)}
+                      {Math.min(conversations.filter((c)=>!dismissedConvIds.has(c.id)).length, 9)}
                     </Badge>
                   )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-72">
-                {conversations.length === 0 ? (
+                {conversations.filter((c)=>!dismissedConvIds.has(c.id)).length === 0 ? (
                   <div className="p-3 text-sm text-muted-foreground">No conversations yet</div>
                 ) : (
-                  conversations.slice(0, 6).map((c) => (
-                    <DropdownMenuItem key={c.id} onClick={() => openConversation(c)} className="flex flex-col items-start gap-1">
-                      <div className="text-sm font-medium truncate w-full">
-                        {(c.participants || []).map((p: string) => p).length > 1 ? (c.participantNames ? Object.values(c.participantNames).join(", ") : c.id) : c.id}
+                  conversations.filter((c)=>!dismissedConvIds.has(c.id)).slice(0, 6).map((c) => (
+                    <DropdownMenuItem key={c.id} className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0" onClick={() => openConversation(c)}>
+                        <div className="text-sm font-medium truncate w-full">
+                          {(c.participants || []).map((p: string) => p).length > 1 ? (c.participantNames ? Object.values(c.participantNames).join(", ") : c.id) : c.id}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate w-full">{c.lastMessage || "New conversation"}</div>
                       </div>
-                      <div className="text-xs text-muted-foreground truncate w-full">{c.lastMessage || "New conversation"}</div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        onClick={(e) => { e.stopPropagation(); dismissConversation(c.id); }}
+                        aria-label="Dismiss conversation"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
                     </DropdownMenuItem>
                   ))
                 )}
