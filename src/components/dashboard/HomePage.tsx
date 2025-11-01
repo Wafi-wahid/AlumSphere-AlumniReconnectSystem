@@ -1,4 +1,7 @@
-import { useState } from "react";
+ 
+import { useState, useEffect } from "react";
+import { db } from "@/lib/firebase";
+import { collectionGroup, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
 import { Bell, TrendingUp, Users, Calendar, Briefcase, Heart, MessageSquare, Star } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +22,37 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   const [referOpen, setReferOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<{ title: string; company: string } | null>(null);
   const [applicant, setApplicant] = useState({ name: user?.name || "", email: user?.email || "", resume: "" });
+  const [invites, setInvites] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsub = onSnapshot(collectionGroup(db, 'invites'), async (snap) => {
+      const mine = snap.docs.filter((d) => (d.data() as any)?.userId === user.id);
+      const items: any[] = [];
+      for (const d of mine) {
+        const parentEventRef = d.ref.parent.parent;
+        if (!parentEventRef) continue;
+        const ev = await getDoc(parentEventRef);
+        if (!ev.exists()) continue;
+        const e = ev.data() as any;
+        items.push({
+          eventId: ev.id,
+          invitePath: d.ref.path,
+          status: (d.data() as any)?.status || 'pending',
+          title: e.topic,
+          date: e.date,
+          time: e.time,
+          type: e.type,
+          location: e.location,
+          category: e.category,
+          description: e.description,
+          responses: (d.data() as any)?.responses || [],
+        });
+      }
+      setInvites(items);
+    });
+    return () => unsub();
+  }, [user?.id]);
   const connections = [
     { name: "Ali Raza", avatar: "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=80&h=80&fit=crop&crop=face", role: "SWE, Google" },
     { name: "Maria Khan", avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&h=80&fit=crop&crop=face", role: "PM, Microsoft" },
@@ -111,6 +145,44 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
           Here's what's happening in your alumni network today
         </p>
       </div>
+
+      {/* Invitations (below cards) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Invitations {invites.length ? <Badge variant="secondary">{invites.length}</Badge> : null}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {invites.length === 0 ? (
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <div>No invitations yet.</div>
+              <div className="text-xs">
+                Why it might be empty:
+                <ul className="list-disc pl-4 mt-1 space-y-1">
+                  <li>No admin has invited you to host an event yet.</li>
+                  <li>You may have already accepted/declined pending invites.</li>
+                  <li>Your account must be logged in as the invited user.</li>
+                </ul>
+              </div>
+            </div>
+          ) : (
+            invites.map((e) => (
+              <div key={e.eventId} className="rounded border p-3 space-y-1">
+                <div className="font-medium">{e.title}</div>
+                <div className="text-xs text-muted-foreground">{e.category} · {e.date} {e.time} · {e.type === 'online' ? 'Webinar' : 'In-Person'} · {e.location}</div>
+                <div className="text-xs">Status: <Badge>{e.status}</Badge></div>
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button size="sm" onClick={async () => { await updateDoc(doc(db, e.invitePath), { status: 'accepted', respondedAt: new Date() }); await updateDoc(doc(db, 'events', e.eventId), { hostAccepted: true }); }}>Accept</Button>
+                  <Button size="sm" variant="outline" onClick={async () => { await updateDoc(doc(db, e.invitePath), { status: 'declined', responseText: "Sorry, I can't make it", respondedAt: new Date() }); await updateDoc(doc(db, 'events', e.eventId), { hostAccepted: false }); }}>Decline</Button>
+                  <Button size="sm" variant="ghost" onClick={async () => { await updateDoc(doc(db, e.invitePath), { status: 'referred', responseText: 'I can refer another alumni', respondedAt: new Date() }); await updateDoc(doc(db, 'events', e.eventId), { hostAccepted: false }); }}>Refer other alumni</Button>
+                  {e.responses.slice(0,3).map((r: string) => (
+                    <Button key={r} size="sm" variant="secondary" onClick={async () => { await updateDoc(doc(db, e.invitePath), { status: 'responded', responseText: r, respondedAt: new Date() }); }}>{r}</Button>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
