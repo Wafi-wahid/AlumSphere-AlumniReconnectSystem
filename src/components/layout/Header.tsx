@@ -89,6 +89,35 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     return () => unsub();
   }, [user?.id]);
 
+  // Connection notifications: new requests and accepted
+  const connLastRef = useRef<{ req: number; acc: number }>({ req: 0, acc: 0 });
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsubReq = onSnapshot(collection(db, 'connections', user.id, 'requests'), (snap) => {
+      const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      items.forEach((it: any) => {
+        const ts = it.createdAt?.toMillis ? it.createdAt.toMillis() : 0;
+        const prev = connLastRef.current.req || 0;
+        if (ts > prev && ts !== 0) {
+          setNotifications((prevList) => [{ id: `conn_req_${it.id}_${ts}`, title: `${it.name || 'Someone'} sent a connection request`, body: undefined, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > connLastRef.current.req) connLastRef.current.req = ts;
+      });
+    });
+    const unsubAcc = onSnapshot(collection(db, 'connections', user.id, 'accepted'), (snap) => {
+      const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      items.forEach((it: any) => {
+        const ts = it.connectedAt?.toMillis ? it.connectedAt.toMillis() : (it.createdAt?.toMillis ? it.createdAt.toMillis() : 0);
+        const prev = connLastRef.current.acc || 0;
+        if (ts > prev && ts !== 0) {
+          setNotifications((prevList) => [{ id: `conn_acc_${it.id}_${ts}`, title: `${it.name || 'Someone'} accepted your request`, body: undefined, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > connLastRef.current.acc) connLastRef.current.acc = ts;
+      });
+    });
+    return () => { unsubReq(); unsubAcc(); };
+  }, [user?.id]);
+
   // Ringtone control
   useEffect(() => {
     // Track first user gesture to enable audio

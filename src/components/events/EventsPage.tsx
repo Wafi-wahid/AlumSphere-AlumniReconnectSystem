@@ -128,6 +128,9 @@ export function EventsPage() {
   const [activeInvite, setActiveInvite] = useState<any | null>(null);
   const [adminTab, setAdminTab] = useState<'create'|'manage'>('create');
   const [myRsvpEventIds, setMyRsvpEventIds] = useState<Set<string>>(new Set());
+  const [connections, setConnections] = useState<Array<{ id: string; name: string; avatar?: string }>>([]);
+  const [referOpen, setReferOpen] = useState(false);
+  const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const unsub = onSnapshot(query(collection(db, "events")), (snap) => {
@@ -177,6 +180,27 @@ export function EventsPage() {
         if (parentEventRef) ids.add(parentEventRef.id);
       }
       setMyRsvpEventIds(ids);
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // Load accepted connections for current user (MVP)
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsub = onSnapshot(collection(db, 'connections', user.id, 'accepted'), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      // normalize to {id, name, avatar}
+      setConnections(list.map((c: any) => ({ id: c.id, name: c.name || c.displayName || 'Connection', avatar: c.avatar || '' })));
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // Load my sent connection requests to prevent duplicates
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsub = onSnapshot(collection(db, 'connections', user.id, 'sent'), (snap) => {
+      const ids = new Set<string>(snap.docs.map((d) => d.id));
+      setSentRequests(ids);
     });
     return () => unsub();
   }, [user?.id]);
@@ -558,9 +582,31 @@ export function EventsPage() {
                             <div className="text-xs text-muted-foreground truncate">{p.role || '—'} · {p.company || '—'} · {p.location || '—'}</div>
                           </div>
                         </div>
-                        <Button size="sm" variant={selectedProfile?.id === p.id ? 'default' : 'outline'} onClick={() => setSelectedProfile(p)}>
-                          {selectedProfile?.id === p.id ? 'Selected' : 'Select'}
-                        </Button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button size="sm" variant={selectedProfile?.id === p.id ? 'default' : 'outline'} onClick={() => setSelectedProfile(p)}>
+                            {selectedProfile?.id === p.id ? 'Selected' : 'Select'}
+                          </Button>
+                          <Button size="sm" variant="ghost" disabled={connections.some(c=>String(c.id)===String(p.id)) || sentRequests.has(String(p.id))} onClick={async () => {
+                            if (!user?.id) { toast.error('Login required'); return; }
+                            try {
+                              await setDoc(doc(db, 'connections', String(p.id), 'requests', String(user.id)), {
+                                id: String(user.id),
+                                name: user?.name || 'User',
+                                avatar: user?.avatar || '',
+                                createdAt: new Date(),
+                              });
+                              await setDoc(doc(db, 'connections', String(user.id), 'sent', String(p.id)), {
+                                id: String(p.id),
+                                name: p?.name || 'Alumni',
+                                avatar: p?.avatar || '',
+                                createdAt: new Date(),
+                              });
+                              toast.success('Connection request sent');
+                            } catch (e:any) {
+                              toast.error(e?.message || 'Failed to send request');
+                            }
+                          }}>Connect</Button>
+                        </div>
                       </div>
                     ))}
                     {filteredProfiles.length === 0 && <div className="text-sm text-muted-foreground">No matching alumni</div>}
@@ -794,14 +840,58 @@ export function EventsPage() {
               <div className="text-xs text-muted-foreground">{activeInvite.category} · {activeInvite.date} {activeInvite.time} · {activeInvite.type} · {activeInvite.location}</div>
             </div>
           )}
-          <DialogFooter className="flex gap-2 justify-end">
+          <DialogFooter className="flex gap-2 justify-between items-center">
+            <div>
+              <Button size="sm" variant="outline" onClick={() => setReferOpen(true)}>Refer from connections</Button>
+            </div>
             {activeInvite && (
               <>
                 <Button size="sm" onClick={async () => { if (!activeInvite) return; await updateDoc(doc(db, activeInvite.inviteRefPath), { status: 'accepted', respondedAt: new Date() }); await updateDoc(doc(db, 'events', activeInvite.id), { hostAccepted: true }); setInviteModalOpen(false); toast.success('Accepted'); }}>Accept</Button>
                 <Button size="sm" variant="outline" onClick={async () => { if (!activeInvite) return; await updateDoc(doc(db, activeInvite.inviteRefPath), { status: 'declined', responseText: "Sorry, I can't make it", respondedAt: new Date() }); await updateDoc(doc(db, 'events', activeInvite.id), { hostAccepted: false }); setInviteModalOpen(false); toast.message('Declined'); }}>Decline</Button>
-                <Button size="sm" variant="ghost" onClick={async () => { if (!activeInvite) return; await updateDoc(doc(db, activeInvite.inviteRefPath), { status: 'referred', responseText: 'I can refer another alumni', respondedAt: new Date() }); await updateDoc(doc(db, 'events', activeInvite.id), { hostAccepted: false }); setInviteModalOpen(false); toast.message('Referred'); }}>Refer</Button>
+                <Button size="sm" variant="ghost" onClick={async () => { if (!activeInvite) return; await updateDoc(doc(db, activeInvite.inviteRefPath), { status: 'referred', responseText: 'I can refer another alumni', respondedAt: new Date() }); await updateDoc(doc(db, 'events', activeInvite.id), { hostAccepted: false }); setInviteModalOpen(false); toast.message('Referred'); }}>Quick refer</Button>
               </>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Refer picker dialog */}
+      <Dialog open={referOpen} onOpenChange={setReferOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Refer from your connections</DialogTitle>
+          </DialogHeader>
+          {connections.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No connections yet</div>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-auto">
+              {connections.map((c) => (
+                <div key={c.id} className="flex items-center justify-between p-2 rounded border">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Avatar className="h-6 w-6"><AvatarImage src={c.avatar} /><AvatarFallback>{(c.name||'?')[0]}</AvatarFallback></Avatar>
+                    <div className="text-sm font-medium truncate">{c.name}</div>
+                  </div>
+                  <Button size="sm" onClick={async () => {
+                    if (!activeInvite) return;
+                    try {
+                      await updateDoc(doc(db, activeInvite.inviteRefPath), {
+                        status: 'referred',
+                        respondedAt: new Date(),
+                        referral: { by: user?.id, referredUid: c.id, referredName: c.name, createdAt: new Date() },
+                      });
+                      await updateDoc(doc(db, 'events', activeInvite.id), { hostAccepted: false });
+                      setReferOpen(false); setInviteModalOpen(false);
+                      toast.success('Referred connection');
+                    } catch (e:any) {
+                      toast.error(e?.message || 'Failed to refer');
+                    }
+                  }}>Refer</Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setReferOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

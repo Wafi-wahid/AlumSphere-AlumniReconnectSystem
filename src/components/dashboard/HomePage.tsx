@@ -1,7 +1,7 @@
  
 import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
-import { collectionGroup, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
+import { collection, collectionGroup, deleteDoc, doc, getDoc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import { Bell, TrendingUp, Users, Calendar, Briefcase, Heart, MessageSquare, Star } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,9 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   const [selectedJob, setSelectedJob] = useState<{ title: string; company: string } | null>(null);
   const [applicant, setApplicant] = useState({ name: user?.name || "", email: user?.email || "", resume: "" });
   const [invites, setInvites] = useState<any[]>([]);
+  const [connTab, setConnTab] = useState<'requests'|'accepted'>('requests');
+  const [connRequests, setConnRequests] = useState<Array<{ id: string; name: string; avatar?: string }>>([]);
+  const [connAccepted, setConnAccepted] = useState<Array<{ id: string; name: string; avatar?: string }>>([]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -52,6 +55,18 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
       setInvites(items);
     });
     return () => unsub();
+  }, [user?.id]);
+
+  // Connections subscriptions
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsubReq = onSnapshot(collection(db, 'connections', user.id, 'requests'), (snap) => {
+      setConnRequests(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+    });
+    const unsubAcc = onSnapshot(collection(db, 'connections', user.id, 'accepted'), (snap) => {
+      setConnAccepted(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+    });
+    return () => { unsubReq(); unsubAcc(); };
   }, [user?.id]);
   const connections = [
     { name: "Ali Raza", avatar: "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=80&h=80&fit=crop&crop=face", role: "SWE, Google" },
@@ -180,6 +195,75 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 </div>
               </div>
             ))
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Connections */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Connections</span>
+            <div className="inline-flex rounded border">
+              <Button size="sm" variant={connTab==='requests'? 'default':'ghost'} onClick={() => setConnTab('requests')}>Requests {connRequests.length ? <Badge className="ml-1" variant="secondary">{connRequests.length}</Badge> : null}</Button>
+              <Button size="sm" variant={connTab==='accepted'? 'default':'ghost'} onClick={() => setConnTab('accepted')}>Accepted {connAccepted.length ? <Badge className="ml-1" variant="secondary">{connAccepted.length}</Badge> : null}</Button>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {connTab === 'requests' ? (
+            connRequests.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No incoming requests</div>
+            ) : (
+              connRequests.map((r) => (
+                <div key={r.id} className="flex items-center justify-between p-2 rounded border">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Avatar className="h-8 w-8"><AvatarImage src={r.avatar} /><AvatarFallback>{(r.name||'?')[0]}</AvatarFallback></Avatar>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{r.name || r.id}</div>
+                      <div className="text-xs text-muted-foreground truncate">{r.id}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={async () => {
+                      try {
+                        // add to my accepted
+                        await setDoc(doc(db, 'connections', user.id, 'accepted', r.id), { id: r.id, name: r.name || r.id, avatar: r.avatar || '' , connectedAt: new Date() });
+                        // mirror to requester accepted
+                        await setDoc(doc(db, 'connections', r.id, 'accepted', user.id), { id: user.id, name: user.name, avatar: user.avatar || '', connectedAt: new Date() });
+                        // remove request
+                        await deleteDoc(doc(db, 'connections', user.id, 'requests', r.id));
+                      } catch {}
+                    }}>Accept</Button>
+                    <Button size="sm" variant="outline" onClick={async () => {
+                      try { await deleteDoc(doc(db, 'connections', user.id, 'requests', r.id)); } catch {}
+                    }}>Decline</Button>
+                  </div>
+                </div>
+              ))
+            )
+          ) : (
+            connAccepted.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No connections yet</div>
+            ) : (
+              <div className="grid gap-2">
+                {connAccepted.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between p-2 rounded border">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Avatar className="h-8 w-8"><AvatarImage src={c.avatar} /><AvatarFallback>{(c.name||'?')[0]}</AvatarFallback></Avatar>
+                      <div className="text-sm font-medium truncate">{c.name || c.id}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => onNavigate('messages')}>Message</Button>
+                      <Button size="sm" variant="ghost" onClick={async () => {
+                        try { await deleteDoc(doc(db, 'connections', user.id, 'accepted', c.id)); } catch {}
+                        try { await deleteDoc(doc(db, 'connections', c.id, 'accepted', user.id)); } catch {}
+                      }}>Remove</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </CardContent>
       </Card>
