@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSearchParams } from "react-router-dom";
 import { db } from "@/lib/firebase";
-import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where, limit } from "firebase/firestore";
+import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where, limit } from "firebase/firestore";
 import { useAuth } from "@/store/auth";
 import { useToast } from "@/hooks/use-toast";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -502,10 +502,16 @@ export function MessagesPage() {
   };
   const deleteChat = async () => {
     if (!selectedConversation?.id || !user?.id) return;
-    const convRef = doc(db, "conversations", selectedConversation.id);
-    await updateDoc(convRef, { archivedBy: arrayUnion(user.id) });
-    toast({ title: "Chat archived" });
-    // remove from local selection
+    const convId = selectedConversation.id;
+    const convRef = doc(db, "conversations", convId);
+    try {
+      // delete all messages in subcollection
+      const msgsSnap = await getDocs(collection(convRef, "messages"));
+      const deletes = msgsSnap.docs.map((d) => deleteDoc(d.ref));
+      await Promise.allSettled(deletes);
+    } catch {}
+    try { await deleteDoc(convRef); } catch {}
+    toast({ title: "Conversation deleted" });
     setSelectedConversation(null);
   };
   const reportBlock = async () => {

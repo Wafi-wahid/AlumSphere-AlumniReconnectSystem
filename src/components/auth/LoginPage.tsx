@@ -71,7 +71,7 @@ export function LoginPage() {
               </div>
               <Button
                 variant="brand"
-                className="w-full h-10"
+                className="w-full h-10 text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]"
                 disabled={isLoading}
                 onClick={async () => {
                   try {
@@ -94,7 +94,7 @@ export function LoginPage() {
             {/* LinkedIn Login */}
             <Button
               variant="brand"
-              className="w-full h-12 transition-transform hover:scale-[1.02]"
+              className="w-full h-12 transition-transform hover:scale-[1.02] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]"
               onClick={handleLinkedInLogin}
               disabled={isLoading}
             >
@@ -105,7 +105,7 @@ export function LoginPage() {
             {/* University SSO */}
             <Button
               variant="soft"
-              className="w-full h-12 transition-transform hover:scale-[1.02]"
+              className="w-full h-12 transition-transform hover:scale-[1.02] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]"
               onClick={handleUniversityLogin}
               disabled={isLoading}
             >

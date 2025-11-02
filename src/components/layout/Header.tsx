@@ -1,4 +1,4 @@
-import { Bell, MessageSquare, User, Menu, GraduationCap } from "lucide-react";
+import { Bell, MessageSquare, User, Menu, GraduationCap, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,7 +15,7 @@ import { useAuth } from "@/store/auth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where, updateDoc, setDoc, doc, arrayUnion } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 interface HeaderProps {
@@ -89,6 +89,37 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     return () => unsub();
   }, [user?.id]);
 
+  // Connection notifications: new requests and accepted
+  const connLastRef = useRef<{ req: number; acc: number }>({ req: 0, acc: 0 });
+  const [pendingReqCount, setPendingReqCount] = useState(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsubReq = onSnapshot(collection(db, 'connections', user.id, 'requests'), (snap) => {
+      const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setPendingReqCount(items.length || 0);
+      items.forEach((it: any) => {
+        const ts = it.createdAt?.toMillis ? it.createdAt.toMillis() : 0;
+        const prev = connLastRef.current.req || 0;
+        if (ts > prev && ts !== 0) {
+          setNotifications((prevList) => [{ id: `conn_req_${it.id}_${ts}`, title: `${it.name || 'Someone'} sent a connection request`, body: undefined, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > connLastRef.current.req) connLastRef.current.req = ts;
+      });
+    });
+    const unsubAcc = onSnapshot(collection(db, 'connections', user.id, 'accepted'), (snap) => {
+      const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      items.forEach((it: any) => {
+        const ts = it.connectedAt?.toMillis ? it.connectedAt.toMillis() : (it.createdAt?.toMillis ? it.createdAt.toMillis() : 0);
+        const prev = connLastRef.current.acc || 0;
+        if (ts > prev && ts !== 0) {
+          setNotifications((prevList) => [{ id: `conn_acc_${it.id}_${ts}`, title: `${it.name || 'Someone'} accepted your request`, body: undefined, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > connLastRef.current.acc) connLastRef.current.acc = ts;
+      });
+    });
+    return () => { unsubReq(); unsubAcc(); };
+  }, [user?.id]);
+
   // Ringtone control
   useEffect(() => {
     // Track first user gesture to enable audio
@@ -159,6 +190,25 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     }
   };
   const clearNotifications = () => setNotifications([]);
+  const dismissNotification = (id: string) => setNotifications((prev) => prev.filter((n) => n.id !== id));
+  const [dismissedConvIds, setDismissedConvIds] = useState<Set<string>>(new Set());
+  // Load persisted header-dismissed conversations from profile
+  useEffect(() => {
+    if (!user?.id) return;
+    const prefRef = doc(db, 'profiles', user.id);
+    const unsub = onSnapshot(prefRef, (snap) => {
+      const data = (snap.data() as any) || {};
+      const arr: string[] = Array.isArray(data.headerDismissedConvIds) ? data.headerDismissedConvIds : [];
+      setDismissedConvIds(new Set(arr));
+    });
+    return () => unsub();
+  }, [user?.id]);
+  const dismissConversation = async (id: string) => {
+    setDismissedConvIds((prev) => new Set([...prev, id]));
+    try {
+      if (user?.id) await setDoc(doc(db, 'profiles', user.id), { headerDismissedConvIds: arrayUnion(id) }, { merge: true });
+    } catch {}
+  };
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b">
       <a
@@ -203,6 +253,15 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                       {Math.min(notifications.length, 9)}
                     </Badge>
                   )}
+                  {pendingReqCount > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="absolute -bottom-1 -right-1 h-4 min-w-4 rounded-full p-0 flex items-center justify-center text-[10px]"
+                      title={`${pendingReqCount} connection request${pendingReqCount>1?'s':''}`}
+                    >
+                      {Math.min(pendingReqCount, 9)}
+                    </Badge>
+                  )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
@@ -211,9 +270,20 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                 ) : (
                   <div className="max-h-80 overflow-auto">
                     {notifications.map((n) => (
-                      <DropdownMenuItem key={n.id} onClick={() => openNotification(n)} className="flex flex-col items-start gap-1">
-                        <div className="text-sm font-medium">{n.title}</div>
-                        {n.body && <div className="text-xs text-muted-foreground truncate w-full">{n.body}</div>}
+                      <DropdownMenuItem key={n.id} className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0" onClick={() => openNotification(n)}>
+                          <div className="text-sm font-medium truncate">{n.title}</div>
+                          {n.body && <div className="text-xs text-muted-foreground truncate w-full">{n.body}</div>}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0"
+                          onClick={(e) => { e.stopPropagation(); dismissNotification(n.id); }}
+                          aria-label="Dismiss notification"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
                       </DropdownMenuItem>
                     ))}
                   </div>
@@ -228,26 +298,37 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative">
                   <MessageSquare className="h-5 w-5" />
-                  {conversations.length > 0 && (
+                  {conversations.filter((c)=>!dismissedConvIds.has(c.id)).length > 0 && (
                     <Badge 
                       variant="destructive" 
                       className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs"
                     >
-                      {Math.min(conversations.length, 9)}
+                      {Math.min(conversations.filter((c)=>!dismissedConvIds.has(c.id)).length, 9)}
                     </Badge>
                   )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-72">
-                {conversations.length === 0 ? (
+                {conversations.filter((c)=>!dismissedConvIds.has(c.id)).length === 0 ? (
                   <div className="p-3 text-sm text-muted-foreground">No conversations yet</div>
                 ) : (
-                  conversations.slice(0, 6).map((c) => (
-                    <DropdownMenuItem key={c.id} onClick={() => openConversation(c)} className="flex flex-col items-start gap-1">
-                      <div className="text-sm font-medium truncate w-full">
-                        {(c.participants || []).map((p: string) => p).length > 1 ? (c.participantNames ? Object.values(c.participantNames).join(", ") : c.id) : c.id}
+                  conversations.filter((c)=>!dismissedConvIds.has(c.id)).slice(0, 6).map((c) => (
+                    <DropdownMenuItem key={c.id} className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0" onClick={() => openConversation(c)}>
+                        <div className="text-sm font-medium truncate w-full">
+                          {(c.participants || []).map((p: string) => p).length > 1 ? (c.participantNames ? Object.values(c.participantNames).join(", ") : c.id) : c.id}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate w-full">{c.lastMessage || "New conversation"}</div>
                       </div>
-                      <div className="text-xs text-muted-foreground truncate w-full">{c.lastMessage || "New conversation"}</div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        onClick={(e) => { e.stopPropagation(); dismissConversation(c.id); }}
+                        aria-label="Dismiss conversation"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
                     </DropdownMenuItem>
                   ))
                 )}

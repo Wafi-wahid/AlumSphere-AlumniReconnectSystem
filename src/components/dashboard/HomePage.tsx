@@ -1,4 +1,7 @@
-import { useState } from "react";
+ 
+import { useState, useEffect } from "react";
+import { db } from "@/lib/firebase";
+import { collection, collectionGroup, deleteDoc, doc, getDoc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import { Bell, TrendingUp, Users, Calendar, Briefcase, Heart, MessageSquare, Star } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,98 +22,188 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   const [referOpen, setReferOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<{ title: string; company: string } | null>(null);
   const [applicant, setApplicant] = useState({ name: user?.name || "", email: user?.email || "", resume: "" });
-  const connections = [
-    { name: "Ali Raza", avatar: "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=80&h=80&fit=crop&crop=face", role: "SWE, Google" },
-    { name: "Maria Khan", avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&h=80&fit=crop&crop=face", role: "PM, Microsoft" },
-    { name: "Zain Ahmed", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop&crop=face", role: "ML Eng, OpenAI" },
-  ];
-  const recentActivity = [
-    {
-      type: "mentorship",
-      title: "Mentoring session with Alex Chen",
-      time: "2 hours ago",
-      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50&h=50&fit=crop&crop=face"
-    },
-    {
-      type: "job",
-      title: "New job posting: Senior Engineer at Meta",
-      time: "4 hours ago",
-      avatar: null
-    },
-    {
-      type: "event",
-      title: "AI/ML Workshop registration confirmed",
-      time: "1 day ago",
-      avatar: null
-    }
+  const [invites, setInvites] = useState<any[]>([]);
+  const [connTab, setConnTab] = useState<'requests'|'accepted'|'sent'>('requests');
+  const [connRequests, setConnRequests] = useState<Array<{ id: string; name: string; avatar?: string; createdAt?: any }>>([]);
+  const [connAccepted, setConnAccepted] = useState<Array<{ id: string; name: string; avatar?: string; connectedAt?: any }>>([]);
+  const [connSent, setConnSent] = useState<Array<{ id: string; name: string; avatar?: string; createdAt?: any }>>([]);
+  const [connLoading, setConnLoading] = useState(true);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (user?.role === 'alumni') return; // skip invites subscription for alumni
+    const unsub = onSnapshot(collectionGroup(db, 'invites'), async (snap) => {
+      const mine = snap.docs.filter((d) => (d.data() as any)?.userId === user.id);
+      const items: any[] = [];
+      for (const d of mine) {
+        const parentEventRef = d.ref.parent.parent;
+        if (!parentEventRef) continue;
+        const ev = await getDoc(parentEventRef);
+        if (!ev.exists()) continue;
+        const e = ev.data() as any;
+        items.push({
+          id: d.id,
+          invitePath: d.ref.path,
+          eventId: parentEventRef.id,
+          title: e.title,
+          date: e.date,
+          time: e.time,
+          location: e.location,
+          category: e.category,
+          description: e.description,
+          responses: (d.data() as any)?.responses || [],
+        });
+      }
+      setInvites(items);
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // Connections subscriptions (requests/accepted/sent)
+  useEffect(() => {
+    if (!user?.id) return;
+    setConnLoading(true);
+    const unsubReq = onSnapshot(collection(db, 'connections', user.id, 'requests'), (snap) => {
+      setConnRequests(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+      setConnLoading(false);
+    });
+    const unsubAcc = onSnapshot(collection(db, 'connections', user.id, 'accepted'), (snap) => {
+      setConnAccepted(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+      setConnLoading(false);
+    });
+    const unsubSent = onSnapshot(collection(db, 'connections', user.id, 'sent'), (snap) => {
+      setConnSent(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+      setConnLoading(false);
+    });
+    return () => { unsubReq(); unsubAcc(); unsubSent(); };
+  }, [user?.id]);
+
+  // Mock data for UI sections
+  const quickStats = [
+    { label: 'Connections', value: (connAccepted.length || 0).toString(), change: '+2 this week', icon: Users },
+    { label: 'Messages', value: '12', change: '+3 new', icon: MessageSquare },
+    { label: 'Events', value: '4', change: '2 upcoming', icon: Calendar },
+    { label: 'Job Matches', value: '6', change: 'updated', icon: Briefcase },
   ];
 
-  const quickStats = [
-    { label: "Profile Views", value: "124", change: "+12%", icon: Users },
-    { label: "Connections", value: "67", change: "+8%", icon: MessageSquare },
-    { label: "Mentoring Score", value: "4.9", change: "+0.2", icon: Star },
-    { label: "Events Attended", value: "8", change: "+2", icon: Calendar }
+  const recentActivity: Array<{ type: string; title: string; time: string; avatar?: string }> = [
+    { type: 'event', title: 'You RSVPed to "Tech Alumni Mixer"', time: '2h ago' },
+    { type: 'job', title: 'Referred Ali Raza for PM at Microsoft', time: '1d ago' },
+    { type: 'mentorship', title: 'Scheduled mentorship with Maria Khan', time: '3d ago' },
   ];
 
   const upcomingEvents = [
-    {
-      title: "Career Fair 2024",
-      date: "March 15",
-      time: "10:00 AM",
-      type: "Career",
-      attendees: 234
-    },
-    {
-      title: "Alumni Networking Mixer",
-      date: "March 20",
-      time: "6:00 PM", 
-      type: "Networking",
-      attendees: 89
-    },
-    {
-      title: "Tech Talk: Future of AI",
-      date: "March 25",
-      time: "2:00 PM",
-      type: "Education",
-      attendees: 156
-    }
+    { title: 'Tech Alumni Mixer', date: 'Nov 10', time: '6:00 PM', type: 'Networking', attendees: 42 },
+    { title: 'AI in Industry', date: 'Nov 15', time: '5:00 PM', type: 'Talk', attendees: 120 },
   ];
 
   const featuredOpportunities = [
-    {
-      title: "Software Engineer",
-      company: "Google",
-      type: "Full-time",
-      postedBy: "Sarah Johnson",
-      applicants: 23
-    },
-    {
-      title: "Product Manager",
-      company: "Microsoft",
-      type: "Full-time", 
-      postedBy: "Michael Chen",
-      applicants: 41
-    },
-    {
-      title: "Data Scientist Intern",
-      company: "Netflix",
-      type: "Internship",
-      postedBy: "Emily Davis",
-      applicants: 67
-    }
+    { title: 'Frontend Engineer', company: 'Stripe', type: 'Full-time', postedBy: 'Linda', applicants: 23 },
+    { title: 'Data Scientist', company: 'Netflix', type: 'Full-time', postedBy: 'Zain', applicants: 14 },
+  ];
+
+  const connections = [
+    { name: 'Ali Raza', avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=80&h=80&fit=crop&crop=face', role: 'SWE, Google' },
+    { name: 'Maria Khan', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&h=80&fit=crop&crop=face', role: 'PM, Microsoft' },
   ];
 
   return (
     <div className="space-y-6">
-      {/* Welcome Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold">
-          Welcome back, {user.name.split(' ')[0]}! 👋
-        </h1>
-        <p className="text-muted-foreground">
-          Here's what's happening in your alumni network today
-        </p>
-      </div>
+
+      {/* Connections */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Connections</span>
+            <div className="inline-flex rounded-lg border bg-muted/30 p-0.5">
+              <Button size="sm" variant={connTab==='requests'? 'default':'ghost'} onClick={() => setConnTab('requests')}>Requests {connRequests.length ? <Badge className="ml-1" variant="secondary">{connRequests.length}</Badge> : null}</Button>
+              <Button size="sm" variant={connTab==='accepted'? 'default':'ghost'} onClick={() => setConnTab('accepted')}>Accepted {connAccepted.length ? <Badge className="ml-1" variant="secondary">{connAccepted.length}</Badge> : null}</Button>
+              <Button size="sm" variant={connTab==='sent'? 'default':'ghost'} onClick={() => setConnTab('sent')}>Sent {connSent.length ? <Badge className="ml-1" variant="secondary">{connSent.length}</Badge> : null}</Button>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {connLoading && (
+            <div className="space-y-2">
+              {[0,1,2].map((i) => (
+                <div key={i} className="h-10 rounded-md bg-muted animate-pulse" />
+              ))}
+            </div>
+          )}
+          {!connLoading && connTab === 'requests' && (
+            connRequests.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No incoming requests</div>
+            ) : (
+              connRequests.map((r) => (
+                <div key={r.id} className="flex items-center justify-between p-2 rounded border hover:bg-muted/40">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Avatar className="h-8 w-8"><AvatarImage src={r.avatar} /><AvatarFallback>{(r.name||'?')[0]}</AvatarFallback></Avatar>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{r.name || r.id}</div>
+                      <div className="text-xs text-muted-foreground truncate">{r.id}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={async () => {
+                      try {
+                        await setDoc(doc(db, 'connections', user.id, 'accepted', r.id), { id: r.id, name: r.name || r.id, avatar: r.avatar || '' , connectedAt: new Date() });
+                        await setDoc(doc(db, 'connections', r.id, 'accepted', user.id), { id: user.id, name: user.name, avatar: user.avatar || '', connectedAt: new Date() });
+                        await deleteDoc(doc(db, 'connections', user.id, 'requests', r.id));
+                      } catch {}
+                    }}>Accept</Button>
+                    <Button size="sm" variant="outline" onClick={async () => {
+                      try { await deleteDoc(doc(db, 'connections', user.id, 'requests', r.id)); } catch {}
+                    }}>Decline</Button>
+                  </div>
+                </div>
+              ))
+            )
+          )}
+          {!connLoading && connTab === 'accepted' && (
+            connAccepted.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No connections yet</div>
+            ) : (
+              <div className="grid gap-2">
+                {connAccepted.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between p-2 rounded border hover:bg-muted/40">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Avatar className="h-8 w-8"><AvatarImage src={c.avatar} /><AvatarFallback>{(c.name||'?')[0]}</AvatarFallback></Avatar>
+                      <div className="text-sm font-medium truncate">{c.name || c.id}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => onNavigate('messages')}>Message</Button>
+                      <Button size="sm" variant="ghost" onClick={async () => {
+                        try { await deleteDoc(doc(db, 'connections', user.id, 'accepted', c.id)); } catch {}
+                        try { await deleteDoc(doc(db, 'connections', c.id, 'accepted', user.id)); } catch {}
+                      }}>Remove</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+          {!connLoading && connTab === 'sent' && (
+            connSent.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No sent requests</div>
+            ) : (
+              connSent.map((s) => (
+                <div key={s.id} className="flex items-center justify-between p-2 rounded border hover:bg-muted/40">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Avatar className="h-8 w-8"><AvatarImage src={s.avatar} /><AvatarFallback>{(s.name||'?')[0]}</AvatarFallback></Avatar>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{s.name || s.id}</div>
+                      <div className="text-xs text-muted-foreground truncate">{s.id}</div>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={async () => {
+                    try { await deleteDoc(doc(db, 'connections', user.id, 'sent', s.id)); } catch {}
+                    try { await deleteDoc(doc(db, 'connections', s.id, 'requests', user.id)); } catch {}
+                  }}>Cancel</Button>
+                </div>
+              ))
+            )
+          )}
+        </CardContent>
+      </Card>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -170,7 +263,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 </div>
               </div>
             ))}
-            <Button variant="soft" className="w-full transition-transform hover:scale-[1.02]" onClick={() => onNavigate("community")}>
+            <Button variant="soft" className="w-full transition-transform hover:scale-[1.02] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => onNavigate("community")}>
               View All Activity
             </Button>
           </CardContent>
@@ -253,14 +346,14 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 <Button
                   size="sm"
                   variant="brand"
-                  className="transition-transform hover:scale-[1.03]"
+                  className="transition-transform hover:scale-[1.03] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]"
                   onClick={() => toast.success(`Spot reserved for ${event.title}`)}
                 >
                   RSVP
                 </Button>
               </div>
             ))}
-            <Button variant="soft" className="w-full transition-transform hover:scale-[1.02]" onClick={() => onNavigate("events")}>
+            <Button variant="soft" className="w-full transition-transform hover:scale-[1.02] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => onNavigate("events")}>
               View All Events
             </Button>
           </CardContent>
@@ -299,7 +392,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                   <Button
                     size="sm"
                     variant="brand"
-                    className="transition-transform hover:scale-[1.03]"
+                    className="transition-transform hover:scale-[1.03] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]"
                     onClick={() => {
                       setSelectedJob({ title: job.title, company: job.company });
                       setApplyOpen(true);
@@ -310,7 +403,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                   <Button
                     size="sm"
                     variant="soft"
-                    className="transition-transform hover:scale-[1.02]"
+                    className="transition-transform hover:scale-[1.02] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]"
                     onClick={() => {
                       setSelectedJob({ title: job.title, company: job.company });
                       setReferOpen(true);
@@ -321,7 +414,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 </div>
               </div>
             ))}
-            <Button variant="brand" className="w-full transition-transform hover:scale-[1.02]" onClick={() => onNavigate("careers")}>
+            <Button variant="brand" className="w-full transition-transform hover:scale-[1.02] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => onNavigate("careers")}>
               View All Jobs
             </Button>
           </CardContent>
