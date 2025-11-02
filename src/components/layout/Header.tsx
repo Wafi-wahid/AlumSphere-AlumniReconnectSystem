@@ -91,10 +91,12 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
 
   // Connection notifications: new requests and accepted
   const connLastRef = useRef<{ req: number; acc: number }>({ req: 0, acc: 0 });
+  const [pendingReqCount, setPendingReqCount] = useState(0);
   useEffect(() => {
     if (!user?.id) return;
     const unsubReq = onSnapshot(collection(db, 'connections', user.id, 'requests'), (snap) => {
       const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setPendingReqCount(items.length || 0);
       items.forEach((it: any) => {
         const ts = it.createdAt?.toMillis ? it.createdAt.toMillis() : 0;
         const prev = connLastRef.current.req || 0;
@@ -249,6 +251,15 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                       className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs"
                     >
                       {Math.min(notifications.length, 9)}
+                    </Badge>
+                  )}
+                  {pendingReqCount > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="absolute -bottom-1 -right-1 h-4 min-w-4 rounded-full p-0 flex items-center justify-center text-[10px]"
+                      title={`${pendingReqCount} connection request${pendingReqCount>1?'s':''}`}
+                    >
+                      {Math.min(pendingReqCount, 9)}
                     </Badge>
                   )}
                 </Button>

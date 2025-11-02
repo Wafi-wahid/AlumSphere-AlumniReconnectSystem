@@ -284,7 +284,7 @@ export default function Profile() {
 
           <div className="flex justify-end gap-3">
             <Button variant="secondary" type="button" onClick={() => reset()} disabled={isSubmitting}>Reset</Button>
-            <Button variant="brand" onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
+            <Button variant="brand" className="text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
               {isSubmitting ? "Saving..." : "Save Changes"}
             </Button>
           </div>

@@ -530,7 +530,7 @@ export function AlumniDirectory() {
                       );
                     }
                     return (
-                      <Button size="sm" className="flex-1" onClick={async () => {
+                      <Button size="sm" className="flex-1 text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={async () => {
                         const authUid = getAuth().currentUser?.uid || String(user?.id || "");
                         if (!authUid) { toast.error('Not signed in'); return; }
                         if (authUid === id) { toast.message('You cannot connect to yourself'); return; }

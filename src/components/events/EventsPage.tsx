@@ -633,7 +633,7 @@ export function EventsPage() {
             </>
             )}
             {adminTab==='create' && (
-              <Button onClick={handleCreateEvent} disabled={creating}>{creating ? "Creating..." : "Create Event"}</Button>
+              <Button className="text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={handleCreateEvent} disabled={creating}>{creating ? "Creating..." : "Create Event"}</Button>
             )}
             {adminTab==='manage' && (
               <div className="space-y-2">
@@ -721,7 +721,7 @@ export function EventsPage() {
                       <div className="flex gap-2">
                         {event.rsvpStatus === null ? (
                           <>
-                            <Button size="sm" onClick={() => handleRSVP(event.id, 'going')}>
+                            <Button size="sm" className="text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => handleRSVP(event.id, 'going')}>
                               <CheckCircle className="h-4 w-4 mr-2" />
                               I'm Going
                             </Button>
@@ -910,7 +910,7 @@ export function EventsPage() {
                 <div className="text-sm">Category: {e.category}</div>
                 <div className="text-sm">{e.description}</div>
                 <div className="flex gap-2 pt-2">
-                  <Button size="sm" onClick={() => handleRSVP(e.id, 'going')}>I'm Going</Button>
+                  <Button size="sm" className="text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => handleRSVP(e.id, 'going')}>I'm Going</Button>
                   <Button size="sm" variant="outline" onClick={() => handleRSVP(e.id, 'interested')}>Interested</Button>
                   <Button size="sm" variant="ghost" onClick={() => setSelectedEventId(null)}>Close</Button>
                 </div>

@@ -90,10 +90,31 @@ export default {
             height: "0",
           },
         },
+        shimmer: {
+          '0%': { backgroundPosition: '200% 0' },
+          '100%': { backgroundPosition: '-200% 0' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-4px)' },
+        },
+        'badge-pop': {
+          '0%': { transform: 'scale(0.6)', opacity: '0' },
+          '60%': { transform: 'scale(1.1)', opacity: '1' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        'tab-underline': {
+          '0%': { width: '0%' },
+          '100%': { width: '100%' },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        shimmer: 'shimmer 1.2s linear infinite',
+        float: 'float 3s ease-in-out infinite',
+        'badge-pop': 'badge-pop 280ms cubic-bezier(0.22,1,0.36,1)',
+        'tab-underline': 'tab-underline 250ms ease-out',
       },
     },
   },
