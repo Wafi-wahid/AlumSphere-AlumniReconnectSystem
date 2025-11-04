@@ -109,6 +109,34 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   return (
     <div className="space-y-6">
 
+      {/* Hero Welcome */}
+      <Card className="overflow-hidden rounded-2xl shadow-strong border-0">
+        <div className="grid grid-cols-1 lg:grid-cols-3">
+          {/* Left: greeting */}
+          <div className="lg:col-span-2 p-6 md:p-8">
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Have a nice day!</div>
+              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Good day, {user?.name || 'Student'} 👋</h1>
+              <p className="text-muted-foreground">Explore your network, find mentors, and track upcoming events.</p>
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button className="h-10 bg-[#1e3a8a] text-white hover:bg-[#60a5fa]" onClick={() => onNavigate('mentorship')}>Find a Mentor</Button>
+              <Button variant="outline" className="h-10 border-[#1e3a8a] text-[#1e3a8a] hover:bg-[#1e3a8a]/10" onClick={() => onNavigate('events')}>Browse Events</Button>
+            </div>
+          </div>
+          {/* Right: visual */}
+          <div className="relative bg-[linear-gradient(135deg,#0b1b3a_0%,#1e3a8a_70%,#1d4ed8_100%)]">
+            <div className="absolute inset-0 opacity-15 bg-[radial-gradient(circle_at_30%_20%,white_0%,transparent_40%)]" />
+            <div className="relative h-full w-full p-6 md:p-8 flex items-center justify-center">
+              <div className="rounded-xl bg-white/10 backdrop-blur-md border border-white/15 p-6 text-white text-center">
+                <div className="text-sm opacity-80">Quick tip</div>
+                <div className="text-lg font-semibold">Complete your profile to get better matches</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       {/* Connections */}
       <Card>
         <CardHeader>
@@ -263,7 +291,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 </div>
               </div>
             ))}
-            <Button variant="soft" className="w-full transition-transform hover:scale-[1.02] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => onNavigate("community")}>
+            <Button variant="soft" className="w-full transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]" onClick={() => onNavigate("community")}> 
               View All Activity
             </Button>
           </CardContent>
@@ -346,14 +374,14 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 <Button
                   size="sm"
                   variant="brand"
-                  className="transition-transform hover:scale-[1.03] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]"
+                  className="transition-transform hover:scale-[1.03] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
                   onClick={() => toast.success(`Spot reserved for ${event.title}`)}
                 >
                   RSVP
                 </Button>
               </div>
             ))}
-            <Button variant="soft" className="w-full transition-transform hover:scale-[1.02] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => onNavigate("events")}>
+            <Button variant="soft" className="w-full transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]" onClick={() => onNavigate("events")}> 
               View All Events
             </Button>
           </CardContent>
@@ -392,7 +420,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                   <Button
                     size="sm"
                     variant="brand"
-                    className="transition-transform hover:scale-[1.03] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]"
+                    className="transition-transform hover:scale-[1.03] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
                     onClick={() => {
                       setSelectedJob({ title: job.title, company: job.company });
                       setApplyOpen(true);
@@ -403,7 +431,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                   <Button
                     size="sm"
                     variant="soft"
-                    className="transition-transform hover:scale-[1.02] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]"
+                    className="transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
                     onClick={() => {
                       setSelectedJob({ title: job.title, company: job.company });
                       setReferOpen(true);
@@ -414,7 +442,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 </div>
               </div>
             ))}
-            <Button variant="brand" className="w-full transition-transform hover:scale-[1.02] text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => onNavigate("careers")}>
+            <Button variant="brand" className="w-full transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]" onClick={() => onNavigate("careers")}> 
               View All Jobs
             </Button>
           </CardContent>

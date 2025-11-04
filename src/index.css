@@ -160,6 +160,9 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground antialiased;
+    /* Subtle non-white background (light gray-blue) */
+    background-color: #f5f7fb;
+    background-image: none;
   }
 
   /* Better focus visible */

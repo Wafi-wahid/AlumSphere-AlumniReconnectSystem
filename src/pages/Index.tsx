@@ -95,9 +95,9 @@ const Index = () => {
       <div className="flex">
         {/* Sidebar */}
         <div className={`
-          fixed inset-y-0 left-0 top-16 z-30 w-64 transition-transform duration-300 ease-out
+          fixed inset-y-0 left-4 top-16 z-30 w-20 transition-transform duration-300 ease-out
           ${sidebarOpen ? 'translate-x-0 shadow-md' : '-translate-x-full'}
-          md:relative md:top-0 md:translate-x-0 md:block md:shadow-none
+          md:relative md:top-0 md:translate-x-0 md:block md:shadow-none md:ml-4
         `}>
           <Navigation
             activeTab={activeTab}
@@ -116,7 +116,11 @@ const Index = () => {
         )}
 
         {/* Main Content */}
-        <main id="main-content" className="flex-1 p-6 md:p-8 md:ml-0 container mx-auto max-w-7xl">
+        <main
+          id="main-content"
+          className={`flex-1 p-6 md:p-8 container mx-auto max-w-7xl rounded-2xl transition-[padding] duration-300
+            md:pl-28 ${sidebarOpen ? 'pl-24' : ''}`}
+        >
           {renderContent()}
         </main>
       </div>
