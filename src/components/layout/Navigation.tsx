@@ -40,15 +40,15 @@ export function Navigation({ activeTab, onTabChange, userRole, className }: Navi
               variant={isActive ? "default" : "ghost"}
               className={cn(
                 "w-full justify-start gap-3 h-12 group relative overflow-hidden",
-                isActive && "bg-primary text-primary-foreground shadow-sm",
-                !isActive && "hover:bg-accent/60"
+                isActive && "bg-[#1e3a8a] text-white shadow-sm",
+                !isActive && "hover:bg-[#1e3a8a]/15"
               )}
               onClick={() => onTabChange(item.id)}
             >
               {/* Active indicator bar */}
               <span
                 className={cn(
-                  "absolute left-0 top-0 h-full w-1 bg-[hsl(var(--brand-accent))] origin-top transition-transform duration-200",
+                  "absolute left-0 top-0 h-full w-1 bg-[#1e3a8a] origin-top transition-transform duration-200",
                   isActive ? "scale-y-100" : "scale-y-0 group-hover:scale-y-100"
                 )}
               />

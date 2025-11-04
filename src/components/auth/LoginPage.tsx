@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { GraduationCap, Linkedin, CheckCircle2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { GraduationCap, Linkedin } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { toast } from "sonner";
 
@@ -66,8 +67,18 @@ export function LoginPage() {
           {/* Role selection */}
           <Tabs value={role} onValueChange={(v) => setRole(v as typeof role)} className="w-full">
             <TabsList className="grid w-full grid-cols-2 rounded-full bg-white/10 border border-white/10 backdrop-blur-sm">
-              <TabsTrigger value="student_alumni" className="rounded-full text-white/80 data-[state=active]:bg-white/20 data-[state=active]:text-white transition-colors">Student/Alumni</TabsTrigger>
-              <TabsTrigger value="admin" className="rounded-full text-white/80 data-[state=active]:bg-white/20 data-[state=active]:text-white transition-colors">Admin</TabsTrigger>
+              <TabsTrigger
+                value="student_alumni"
+                className="rounded-full text-white/80 transition-colors data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-white hover:data-[state=inactive]:bg-white/15"
+              >
+                Student/Alumni
+              </TabsTrigger>
+              <TabsTrigger
+                value="admin"
+                className="rounded-full text-white/80 transition-colors data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-white hover:data-[state=inactive]:bg-white/15"
+              >
+                Admin
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -90,7 +101,7 @@ export function LoginPage() {
                 </div>
                 <Button
                   variant="brand"
-                  className="w-full h-10 text-white border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]"
+                  className="w-full h-10 text-white border-0 bg-[#1e3a8a] hover:bg-[#1d4ed8]"
                   disabled={isLoading}
                   onClick={async () => {
                     try {
@@ -106,8 +117,8 @@ export function LoginPage() {
                 >
                   {role === 'admin' ? 'Sign In as Admin' : 'Sign In'}
                 </Button>
-                <div className="text-xs text-left text-white/80">
-                  Don’t have an account? <a className="text-primary underline" href="/register">Create one</a>
+                <div className="text-sm text-center text-white/90">
+                  Don’t have an account? <a className="underline text-[#1e3a8a] hover:text-[#1d4ed8]" href="/register">Create one</a>
                 </div>
               </div>
 
@@ -131,29 +142,22 @@ export function LoginPage() {
           </Card>
         </div>
         </div>
-        {/* Right (desktop left): Logo and description */}
-        <div className={`order-2 md:order-1 relative hidden md:flex items-center justify-start pr-6 ${mounted ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4'} overflow-hidden`}>
-          <div className="relative z-10 max-w-md space-y-6 text-left pl-4">
-            <div className="inline-flex p-4 rounded-2xl bg-gradient-to-br from-primary to-primary-light shadow-xl">
+        {/* Right (desktop left): Logo and centered features */}
+        <div className={`order-2 md:order-1 relative hidden md:flex items-center justify-center px-6 ${mounted ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4'} overflow-hidden`}>
+          <div className="relative z-10 max-w-md space-y-6 text-center px-4">
+            <div className="mx-auto inline-flex p-4 rounded-2xl bg-gradient-to-br from-primary to-primary-light shadow-xl">
               <GraduationCap className="h-8 w-8 text-primary-foreground" />
             </div>
             <div className="space-y-3">
               <h1 className="text-4xl font-extrabold tracking-tight text-white">AlumSphere</h1>
-              <p className="text-white/85 text-lg leading-relaxed">Connect students and alumni to mentor, hire, and grow together.</p>
-              <ul className="mt-2 space-y-2">
-                <li className="flex items-start gap-2 text-white/80">
-                  <CheckCircle2 className="h-5 w-5 text-white/90 mt-0.5" />
-                  <span>Find mentors and peers across batches and industries</span>
-                </li>
-                <li className="flex items-start gap-2 text-white/80">
-                  <CheckCircle2 className="h-5 w-5 text-white/90 mt-0.5" />
-                  <span>Discover jobs, referrals, and curated opportunities</span>
-                </li>
-                <li className="flex items-start gap-2 text-white/80">
-                  <CheckCircle2 className="h-5 w-5 text-white/90 mt-0.5" />
-                  <span>Give back by guiding students and hosting events</span>
-                </li>
-              </ul>
+              <p className="text-white/85 text-lg leading-relaxed">
+                Where students meet alumni to network, mentor, and grow.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <Badge variant="secondary" className="justify-center py-2">Directory</Badge>
+              <Badge variant="secondary" className="justify-center py-2">Mentorship</Badge>
+              <Badge variant="secondary" className="justify-center py-2">Careers</Badge>
             </div>
           </div>
           <div className="pointer-events-none absolute -left-10 -bottom-16 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
