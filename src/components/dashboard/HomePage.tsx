@@ -42,7 +42,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   });
   const [streakDays] = useState<number>(3);
   const [level] = useState<number>(1);
-  const [missions, setMissions] = useState<Array<{ id: 'connect'|'apply'|'request'; title: string; progress: number }>>([
+  const [missions, setMissions] = useState<Array<{ id: 'connect'|'apply'|'request'|'host'; title: string; progress: number }>>([
     { id: 'connect', title: "Connect with alumni's", progress: 0 },
     { id: 'apply', title: 'Apply to job', progress: 0 },
     { id: 'request', title: 'Request mentorship', progress: 0 },
@@ -56,7 +56,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   const [hasPost, setHasPost] = useState<boolean>(false);
   const [hasLiked, setHasLiked] = useState<boolean>(false);
 
-  const getNewBadges = (kind: 'connect'|'apply'|'request', count: number, current: string[]) => {
+  const getNewBadges = (kind: 'connect'|'apply'|'request'|'host', count: number, current: string[]) => {
     const newOnes: string[] = [];
     if (kind === 'connect') {
       if (count >= 5 && !current.includes('Connect Level 1')) newOnes.push('Connect Level 1');
@@ -73,6 +73,8 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
       if (count >= 10 && !current.includes('Mentorship Master')) newOnes.push('Mentorship Master');
       if (count >= 15 && !current.includes('Community Favorite')) newOnes.push('Community Favorite');
       if (count >= 20 && !current.includes('Guidance Guru')) newOnes.push('Guidance Guru');
+    } else if (kind === 'host') {
+      // no-op badge progression for hosting events (not defined yet)
     }
     return newOnes;
   };
@@ -90,14 +92,14 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     await setDoc(doc(db, 'users', user.id, 'gamification', 'summary'), body, { merge: true });
   };
 
-  const persistMissions = async (nextMissions: Array<{ id: 'connect'|'apply'|'request'; title: string; progress: number }>) => {
+  const persistMissions = async (nextMissions: Array<{ id: 'connect'|'apply'|'request'|'host'; title: string; progress: number }>) => {
     if (!user?.id) return;
     const today = new Date();
     const key = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
     await setDoc(doc(db, 'users', user.id, 'missions', 'today'), { dateKey: key, missions: nextMissions }, { merge: true });
   };
 
-  const handleMissionAction = async (id: 'connect'|'apply'|'request') => {
+  const handleMissionAction = async (id: 'connect'|'apply'|'request'|'host') => {
     const nextPoints = points + 10;
     const nextMissions = missions.map((m) => m.id === id ? { ...m, progress: Math.min(100, m.progress + 50) } : m);
     let nConnect = connectCount, nApply = applyCount, nReq = mentorshipCount;
@@ -118,6 +120,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     if (id === 'connect') onNavigate('directory');
     if (id === 'apply') onNavigate('careers');
     if (id === 'request') onNavigate('mentorship');
+    if (id === 'host') onNavigate('events');
   };
 
   useEffect(() => {
@@ -176,11 +179,20 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
         const d = snap.data() as any;
         if (Array.isArray(d.missions)) setMissions(d.missions);
       } else {
-        const init = [
-          { id: 'connect', title: "Connect with alumni's", progress: 0 },
-          { id: 'apply', title: 'Apply to job', progress: 0 },
-          { id: 'request', title: 'Request mentorship', progress: 0 },
-        ] as Array<{ id: 'connect'|'apply'|'request'; title: string; progress: number }>;
+        const init = (
+          user?.role === 'alumni'
+            ? [
+                { id: 'apply', title: 'Post a job', progress: 0 },
+                { id: 'connect', title: 'Connect with students', progress: 0 },
+                { id: 'request', title: 'Mentor students', progress: 0 },
+                { id: 'host', title: 'Host events', progress: 0 },
+              ]
+            : [
+                { id: 'connect', title: "Connect with alumni's", progress: 0 },
+                { id: 'apply', title: 'Apply to job', progress: 0 },
+                { id: 'request', title: 'Request mentorship', progress: 0 },
+              ]
+        ) as Array<{ id: 'connect'|'apply'|'request'|'host'; title: string; progress: number }>;
         await persistMissions(init);
       }
     });
@@ -354,15 +366,31 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
               <p className="text-white/80">Build your career roadmap with mentors, opportunities, and daily missions.</p>
             </div>
             <div className="mt-6 flex flex-col sm:flex-row flex-wrap items-center gap-2 md:gap-3">
-              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => onNavigate('mentorship')}>
-                Find a Mentor
-              </Button>
-              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => onNavigate('events')}>
-                Browse Events
-              </Button>
-              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => onNavigate('careers')}>
-                Explore Jobs
-              </Button>
+              {user?.role === 'alumni' ? (
+                <>
+                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => onNavigate('mentorship')}>
+                    Mentor Students
+                  </Button>
+                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => onNavigate('careers')}>
+                    Post a Job
+                  </Button>
+                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => onNavigate('community')}>
+                    Engage with Community
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => onNavigate('mentorship')}>
+                    Find a Mentor
+                  </Button>
+                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => onNavigate('events')}>
+                    Browse Events
+                  </Button>
+                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => onNavigate('careers')}>
+                    Explore Jobs
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 
@@ -372,7 +400,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
               <div className="rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 p-6 text-white text-center max-w-xs">
                 <div className="text-sm opacity-90">Unlock matches</div>
                 <div className="text-lg font-semibold">Complete your profile to get better opportunities</div>
-                <Button className="mt-3 h-9 bg-white text-[#0b1b3a] hover:bg-white/90 w-full" onClick={() => onNavigate('profile')}>Complete Profile</Button>
+                <Button className="mt-3 h-9 bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a] w-full" onClick={() => onNavigate('profile')}>Complete Profile</Button>
               </div>
             </div>
           </div>
@@ -393,14 +421,25 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
             <div className="space-y-3 max-h-60 overflow-auto pr-1">
               {missions.map(m => (
                 <div key={m.id} className="p-3 rounded-xl border flex items-center justify-between gap-3 hover:bg-accent/50 transition-colors">
-                  <div className="text-sm font-medium">{m.title}</div>
+                  <div className="text-sm font-medium">
+                    {user?.role === 'alumni'
+                      ? (m.id === 'apply' ? 'Post a job'
+                        : m.id === 'connect' ? 'Connect with students'
+                        : m.id === 'request' ? 'Mentor students'
+                        : m.id === 'host' ? 'Host events'
+                        : m.title)
+                      : m.title}
+                  </div>
                   <div className="flex-1 max-w-[280px]">
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
                       <div className="h-full bg-primary transition-all duration-700" style={{ width: `${m.progress}%` }} />
                     </div>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => handleMissionAction(m.id)}>
-                    {m.id === 'connect' ? 'Connect' : m.id === 'apply' ? 'Apply' : 'Request'}
+                  <Button size="sm" className="bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]" onClick={() => handleMissionAction(m.id)}>
+                    {m.id === 'apply' ? (user?.role === 'alumni' ? 'Post' : 'Apply')
+                      : m.id === 'request' ? (user?.role === 'alumni' ? 'Mentor' : 'Request')
+                      : m.id === 'host' ? 'Host'
+                      : 'Connect'}
                   </Button>
                 </div>
               ))}
@@ -422,42 +461,88 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
         <div className="space-y-6">
           <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
             <CardContent className="p-5">
-              <div className="flex items-start gap-3">
-                <Trophy className="h-6 w-6 text-yellow-500" />
-                <div className="space-y-1">
-                  <div className="text-sm font-semibold">Ali got an internship through Echo Alum Link 🎉</div>
-                  <div className="text-xs text-muted-foreground">Get guidance from mentors and land your first role.</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border bg-background">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Featured Mentors</CardTitle>
-              <CardDescription>Top mentor</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 p-5">
-              {featuredMentors.slice(0,3).map(m => (
-                <div key={m.id} className="flex items-center justify-between p-2 rounded-lg border hover:bg-muted/50">
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <Avatar className="h-9 w-9">
-                        <AvatarImage src={m.avatar} />
-                        <AvatarFallback>{m.name[0]}</AvatarFallback>
-                      </Avatar>
-                      {m.online ? <span className="absolute -right-0 -bottom-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-background" /> : null}
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium">{m.name}</div>
-                      <div className="text-xs text-muted-foreground">{m.role}</div>
-                    </div>
+              {user?.role === 'alumni' ? (
+                <div className="flex items-start gap-3">
+                  <Trophy className="h-6 w-6 text-yellow-500" />
+                  <div className="space-y-1">
+                    <div className="text-sm font-semibold">Share your story on Wall of Fame</div>
+                    <div className="text-xs text-muted-foreground">Inspire students with your journey and tips.</div>
+                    <Button size="sm" className="mt-2" onClick={() => onNavigate('wallOfFame')}>Share your story</Button>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => onNavigate('mentorship')}>Request</Button>
                 </div>
-              ))}
-              <Button className="w-full mt-1" variant="outline" onClick={() => onNavigate('mentorship')}>See more</Button>
+              ) : (
+                <div className="flex items-start gap-3">
+                  <Trophy className="h-6 w-6 text-yellow-500" />
+                  <div className="space-y-1">
+                    <div className="text-sm font-semibold">Ali got an internship through Echo Alum Link 🎉</div>
+                    <div className="text-xs text-muted-foreground">Get guidance from mentors and land your first role.</div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
+          {user?.role === 'alumni' ? (
+            <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border bg-background">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Mentorship Requests</CardTitle>
+                <CardDescription>Students seeking your guidance</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 p-5">
+                {connRequests.slice(0,3).length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No requests yet. Turn on availability and get discovered.</div>
+                ) : connRequests.slice(0,3).map(r => (
+                  <div key={r.id} className="flex items-center justify-between p-2 rounded-lg border hover:bg-muted/50">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={r.avatar} />
+                        <AvatarFallback>{(r.name||'S')[0]}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="text-sm font-medium">{r.name || 'Student'}</div>
+                        <div className="text-xs text-muted-foreground">Mentorship request</div>
+                      </div>
+                    </div>
+                    <Button size="sm" className="bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]" onClick={() => onNavigate('mentorship')}>View</Button>
+                  </div>
+                ))}
+                <Button
+                  className="w-full mt-1 transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
+                  onClick={() => onNavigate('mentorship')}
+                >
+                  See more
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border bg-background">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Featured Mentors</CardTitle>
+                <CardDescription>Top mentor</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 p-5">
+                {featuredMentors.slice(0,3).map(m => (
+                  <div key={m.id} className="flex items-center justify-between p-2 rounded-lg border hover:bg-muted/50">
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <Avatar className="h-9 w-9">
+                          <AvatarImage src={m.avatar} />
+                          <AvatarFallback>{m.name[0]}</AvatarFallback>
+                        </Avatar>
+                        {m.online ? <span className="absolute -right-0 -bottom-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-background" /> : null}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium">{m.name}</div>
+                        <div className="text-xs text-muted-foreground">{m.role}</div>
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => onNavigate('mentorship')}>Request</Button>
+                  </div>
+                ))}
+                <Button className="w-full mt-1" variant="outline" onClick={() => onNavigate('mentorship')}>See more</Button>
+              </CardContent>
+            </Card>
+          )}
+          
         </div>
       </div>
 
@@ -578,9 +663,9 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
             <div className="rounded-xl border bg-muted/30 p-3">
               <div className="text-xs text-muted-foreground mb-2">Earn more</div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => onNavigate('directory')}>Connect with alumni</Button>
-                <Button size="sm" variant="outline" onClick={() => onNavigate('careers')}>Apply to jobs</Button>
-                <Button size="sm" variant="outline" onClick={() => onNavigate('mentorship')}>Request mentorship</Button>
+                <Button size="sm" className="bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]" onClick={() => onNavigate('directory')}>Connect with alumni</Button>
+                <Button size="sm" className="bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]" onClick={() => onNavigate('careers')}>Apply to jobs</Button>
+                <Button size="sm" className="bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]" onClick={() => onNavigate('mentorship')}>Request mentorship</Button>
               </div>
             </div>
           </CardContent>
@@ -620,29 +705,32 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 </div>
                 <Button
                   size="sm"
-                  variant="brand"
-                  className="transition-transform hover:scale-[1.03] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
+                  className="transition-transform hover:scale-[1.03] text-[#0b1b3a] bg-yellow-500 hover:bg-yellow-400 border-0"
                   onClick={() => toast.success(`Spot reserved for ${event.title}`)}
                 >
                   RSVP
                 </Button>
               </div>
             ))}
-            <Button variant="soft" className="w-full transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]" onClick={() => onNavigate("events")}> 
-              View All Events
+            <Button
+              variant="brand"
+              className="w-full transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
+              onClick={() => onNavigate('events')}
+            >
+              View all events
             </Button>
           </CardContent>
         </Card>
 
         {/* Featured Job Opportunities */}
-        <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
+        <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border bg-background">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Briefcase className="h-5 w-5" />
-              Featured Opportunities
+              {user?.role === 'alumni' ? 'Your Posted Roles' : 'Featured Opportunities'}
             </CardTitle>
             <CardDescription>
-              Jobs posted by your alumni network
+              {user?.role === 'alumni' ? 'Jobs you posted' : 'Jobs posted by your alumni network'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 p-5">
@@ -664,33 +752,45 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Button
-                    size="sm"
-                    variant="brand"
-                    className="transition-transform hover:scale-[1.03] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
-                    onClick={() => {
-                      setSelectedJob({ title: job.title, company: job.company });
-                      setApplyOpen(true);
-                    }}
-                  >
-                    Apply
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="soft"
-                    className="transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
-                    onClick={() => {
-                      setSelectedJob({ title: job.title, company: job.company });
-                      setReferOpen(true);
-                    }}
-                  >
-                    Refer
-                  </Button>
+                  {user?.role === 'alumni' ? (
+                    <Button
+                      size="sm"
+                      className="transition-transform hover:scale-[1.03] text-[#0b1b3a] bg-yellow-500 hover:bg-yellow-400 border-0"
+                      onClick={() => onNavigate('careers')}
+                    >
+                      Manage
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="brand"
+                        className="transition-transform hover:scale-[1.03] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
+                        onClick={() => {
+                          setSelectedJob({ title: job.title, company: job.company });
+                          setApplyOpen(true);
+                        }}
+                      >
+                        Apply
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="soft"
+                        className="transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
+                        onClick={() => {
+                          setSelectedJob({ title: job.title, company: job.company });
+                          setReferOpen(true);
+                        }}
+                      >
+                        Refer
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
             <Button variant="brand" className="w-full transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]" onClick={() => onNavigate("careers")}> 
-              View All Jobs
+              {user?.role === 'alumni' ? 'Manage jobs' : 'View All Jobs'}
             </Button>
           </CardContent>
         </Card>
