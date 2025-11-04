@@ -1,3 +1,31 @@
+  async function bumpAuthorLikesDaily(authorId: string, delta: number) {
+    try {
+      const summaryRef = doc(db, 'users', authorId, 'analytics', 'summary');
+      const snap = await getDoc(summaryRef);
+      const data = (snap.exists() ? (snap.data() as any) : {}) || {};
+      let likesDaily7d: number[] = Array.isArray(data.likesDaily7d) ? data.likesDaily7d.slice(-7) : [];
+      const today = new Date();
+      const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+      const lastKey = data.likesDailyUpdatedAt || todayKey;
+      const lastDate = new Date(lastKey);
+      const dayMs = 24 * 60 * 60 * 1000;
+      const diffDays = Math.max(0, Math.floor((+today - +lastDate) / dayMs));
+      if (diffDays > 0) {
+        for (let i = 0; i < diffDays; i++) {
+          likesDaily7d.push(0);
+          if (likesDaily7d.length > 7) likesDaily7d.shift();
+        }
+      }
+      while (likesDaily7d.length < 7) likesDaily7d.unshift(0);
+      const lastIdx = likesDaily7d.length - 1;
+      likesDaily7d[lastIdx] = Math.max(0, (likesDaily7d[lastIdx] || 0) + delta);
+      const postLikes7d = Math.max(0, likesDaily7d.reduce((a, b) => a + b, 0));
+      await setDoc(summaryRef, { likesDaily7d, postLikes7d, likesDailyUpdatedAt: todayKey }, { merge: true });
+    } catch (e) {
+      console.error('Failed updating likesDaily7d', e);
+    }
+  }
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Heart, MessageCircle, Share2, Send, Image, Video, FileText, Trash2, MessageSquareText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,7 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/store/auth";
 import { db } from "@/lib/firebase";
-import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, setDoc } from "firebase/firestore";
+import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, setDoc, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -99,6 +127,7 @@ export function CommunityPage() {
     return () => {
       unsubDummy();
     };
+
   }, []);
 
   // Connections subscriptions for duplicate guard in community
@@ -194,6 +223,10 @@ export function CommunityPage() {
     await updateDoc(refDoc, {
       likes: already ? arrayRemove(user.id) : arrayUnion(user.id),
     });
+    // Update author's analytics summary for likes (rolling 7d)
+    if (post.authorId) {
+      bumpAuthorLikesDaily(post.authorId, already ? -1 : +1);
+    }
   };
 
   const handleAddComment = async (post: Post) => {
