@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,9 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useAuth } from "@/store/auth";
+import { GraduationCap, CheckCircle2 } from "lucide-react";
 
 const years = Array.from({ length: 2025 - 2010 + 1 }, (_, i) => 2010 + i);
 const seasons = ["Spring", "Fall"] as const;
@@ -44,6 +47,11 @@ type AlumniForm = z.infer<typeof alumniSchema>;
 export default function Register() {
   const { registerStudent, registerAlumni } = useAuth();
   const [tab, setTab] = useState<"student" | "alumni">("student");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 20);
+    return () => clearTimeout(t);
+  }, []);
 
   const {
     register: regS,
@@ -96,141 +104,177 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/20 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
-          <TabsList className="grid grid-cols-2 w-full">
-            <TabsTrigger value="student">Student</TabsTrigger>
-            <TabsTrigger value="alumni">Alumni</TabsTrigger>
-          </TabsList>
+    <div className="relative min-h-screen bg-background">
+      {/* Gradient to match Login */}
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom_right,#0b1b3a_0%,#3b82f6_70%,#60a5fa_100%)]" />
+      <div className={`relative grid min-h-screen grid-cols-1 md:grid-cols-2 gap-0 p-6 transition-all duration-700 ease-out ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+        {/* Brand panel (left on desktop) */}
+        <div className={`order-2 md:order-1 relative hidden md:flex items-center justify-center px-6 ${mounted ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4'} overflow-hidden`}>
+          <div className="relative z-10 max-w-md space-y-6 text-center px-4">
+            <div className="mx-auto inline-flex p-4 rounded-2xl bg-gradient-to-br from-primary to-primary-light shadow-xl">
+              <GraduationCap className="h-8 w-8 text-primary-foreground" />
+            </div>
+            <div className="space-y-3">
+              <h1 className="text-4xl font-extrabold tracking-tight text-white">AlumSphere</h1>
+              <p className="text-white/85 text-lg leading-relaxed">Join the community to learn, mentor, and grow.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <Badge variant="secondary" className="justify-center py-2">Directory</Badge>
+              <Badge variant="secondary" className="justify-center py-2">Mentorship</Badge>
+              <Badge variant="secondary" className="justify-center py-2">Careers</Badge>
+            </div>
+          </div>
+          <div className="pointer-events-none absolute -left-10 -bottom-16 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
+        </div>
 
-          <TabsContent value="student">
-            <Card className="shadow-lg border-0 bg-card/50 backdrop-blur">
-              <CardHeader>
-                <CardTitle>Student Registration</CardTitle>
-                <CardDescription>Create your student account</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="s_name">Full Name</Label>
-                  <Input id="s_name" placeholder="John Doe" {...regS("name")} />
-                  {errorsS.name && <p className="text-xs text-destructive">{errorsS.name.message}</p>}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="s_email">Email</Label>
-                  <Input id="s_email" type="email" placeholder="you@university.edu" {...regS("email")} />
-                  {errorsS.email && <p className="text-xs text-destructive">{errorsS.email.message}</p>}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="s_password">Password</Label>
-                  <Input id="s_password" type="password" placeholder="••••••••" {...regS("password")} />
-                  {errorsS.password && <p className="text-xs text-destructive">{errorsS.password.message}</p>}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="s_sap">SAP ID</Label>
-                  <Input id="s_sap" placeholder="123456" {...regS("sapId")} />
-                  {errorsS.sapId && <p className="text-xs text-destructive">{errorsS.sapId.message}</p>}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-2">
-                    <Label>Season</Label>
-                    <Select onValueChange={(v) => setValueS("batchSeason", v as any)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select season" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {seasons.map((s) => (
-                          <SelectItem key={s} value={s}>{s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errorsS.batchSeason && <p className="text-xs text-destructive">{errorsS.batchSeason.message as any}</p>}
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Year</Label>
-                    <Select onValueChange={(v) => setValueS("batchYear", Number(v))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select year" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {years.map((y) => (
-                          <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errorsS.batchYear && <p className="text-xs text-destructive">{errorsS.batchYear.message as any}</p>}
-                  </div>
-                </div>
-                <Button className="w-full" variant="brand" disabled={submittingS} onClick={handleSubmitS(onStudent)}>
-                  {submittingS ? "Registering..." : "Register as Student"}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
+        {/* Form column (right on desktop, first on mobile) */}
+        <div className="order-1 md:order-2 flex items-center justify-start">
+          <div className="w-full max-w-md space-y-6">
+            <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 rounded-full bg-white/10 border border-white/10 backdrop-blur-sm">
+                <TabsTrigger value="student" className="rounded-full text-white/80 transition-colors data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-white hover:data-[state=inactive]:bg-white/15">Student</TabsTrigger>
+                <TabsTrigger value="alumni" className="rounded-full text-white/80 transition-colors data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-white hover:data-[state=inactive]:bg-white/15">Alumni</TabsTrigger>
+              </TabsList>
 
-          <TabsContent value="alumni">
-            <Card className="shadow-lg border-0 bg-card/50 backdrop-blur">
-              <CardHeader>
-                <CardTitle>Alumni Registration</CardTitle>
-                <CardDescription>Create your alumni account</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="a_name">Full Name</Label>
-                  <Input id="a_name" placeholder="Sarah Johnson" {...regA("name")} />
-                  {errorsA.name && <p className="text-xs text-destructive">{errorsA.name.message}</p>}
+              <TabsContent value="student">
+                <div key={tab} className="animate-in fade-in-50 slide-in-from-bottom-2">
+                  <Card className={`shadow-[0_8px_30px_rgba(0,0,0,0.2)] border border-white/10 bg-white/10 backdrop-blur-xl transition-all duration-700 ease-out delay-150 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+                    <CardHeader>
+                      <CardTitle className="text-white">Student Registration</CardTitle>
+                      <CardDescription className="text-white/80">Create your student account</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="s_name" className="text-white/90">Full Name</Label>
+                        <Input id="s_name" placeholder="John Doe" {...regS('name')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                        {errorsS.name && <p className="text-xs text-destructive">{errorsS.name.message}</p>}
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="s_email" className="text-white/90">Email</Label>
+                        <Input id="s_email" type="email" placeholder="you@university.edu" {...regS('email')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                        {errorsS.email && <p className="text-xs text-destructive">{errorsS.email.message}</p>}
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="s_password" className="text-white/90">Password</Label>
+                        <Input id="s_password" type="password" placeholder="••••••••" {...regS('password')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                        {errorsS.password && <p className="text-xs text-destructive">{errorsS.password.message}</p>}
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="s_sap" className="text-white/90">SAP ID</Label>
+                        <Input id="s_sap" placeholder="123456" {...regS('sapId')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                        {errorsS.sapId && <p className="text-xs text-destructive">{errorsS.sapId.message}</p>}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="grid gap-2">
+                          <Label className="text-white/90">Session</Label>
+                          <Select onValueChange={(v) => setValueS('batchSeason', v as any)}>
+                            <SelectTrigger className="bg-white/5 border-white/15 text-white hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[#1e3a8a]/40">
+                              <SelectValue placeholder="Select session" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {seasons.map((s) => (
+                                <SelectItem key={s} value={s}>{s}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {errorsS.batchSeason && <p className="text-xs text-destructive">{errorsS.batchSeason.message as any}</p>}
+                        </div>
+                        <div className="grid gap-2">
+                          <Label className="text-white/90">Year</Label>
+                          <Select onValueChange={(v) => setValueS('batchYear', Number(v))}>
+                            <SelectTrigger className="bg-white/5 border-white/15 text-white hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[#1e3a8a]/40">
+                              <SelectValue placeholder="Select year" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {years.map((y) => (
+                                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {errorsS.batchYear && <p className="text-xs text-destructive">{errorsS.batchYear.message as any}</p>}
+                        </div>
+                      </div>
+                      <Button className="w-full text-white border-0 bg-[#1e3a8a] hover:bg-[#1d4ed8]" disabled={submittingS} onClick={handleSubmitS(onStudent)}>
+                        {submittingS ? 'Registering...' : 'Register as Student'}
+                      </Button>
+                      <div className="text-base text-center text-white/90">
+                        Already have an account? <Link className="underline text-[#1e3a8a] hover:text-[#1d4ed8]" to="/">Sign in</Link>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="a_email">Email</Label>
-                  <Input id="a_email" type="email" placeholder="you@email.com" {...regA("email")} />
-                  {errorsA.email && <p className="text-xs text-destructive">{errorsA.email.message}</p>}
+              </TabsContent>
+
+              <TabsContent value="alumni">
+                <div key={tab} className="animate-in fade-in-50 slide-in-from-bottom-2">
+                  <Card className={`shadow-[0_8px_30px_rgba(0,0,0,0.2)] border border-white/10 bg-white/10 backdrop-blur-xl transition-all duration-700 ease-out delay-150 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+                    <CardHeader>
+                      <CardTitle className="text-white">Alumni Registration</CardTitle>
+                      <CardDescription className="text-white/80">Create your alumni account</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="a_name" className="text-white/90">Full Name</Label>
+                        <Input id="a_name" placeholder="Sarah Johnson" {...regA('name')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                        {errorsA.name && <p className="text-xs text-destructive">{errorsA.name.message}</p>}
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="a_email" className="text-white/90">Email</Label>
+                        <Input id="a_email" type="email" placeholder="you@email.com" {...regA('email')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                        {errorsA.email && <p className="text-xs text-destructive">{errorsA.email.message}</p>}
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="a_password" className="text-white/90">Password</Label>
+                        <Input id="a_password" type="password" placeholder="••••••••" {...regA('password')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                        {errorsA.password && <p className="text-xs text-destructive">{errorsA.password.message}</p>}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="grid gap-2">
+                          <Label className="text-white/90">Session</Label>
+                          <Select onValueChange={(v) => setValueA('gradSeason', v as any)}>
+                            <SelectTrigger className="bg-white/5 border-white/15 text-white hover:bg-[#1e3a8a] hover:text-white focus-visible:ring-2 focus-visible:ring-[#1e3a8a]/40">
+                              <SelectValue placeholder="Select session" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {seasons.map((s) => (
+                                <SelectItem key={s} value={s}>{s}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {errorsA.gradSeason && <p className="text-xs text-destructive">{errorsA.gradSeason.message as any}</p>}
+                        </div>
+                        <div className="grid gap-2">
+                          <Label className="text-white/90">Year</Label>
+                          <Select onValueChange={(v) => setValueA('gradYear', Number(v))}>
+                            <SelectTrigger className="bg-white/5 border-white/15 text-white hover:bg-[#1e3a8a] hover:text-white focus-visible:ring-2 focus-visible:ring-[#1e3a8a]/40">
+                              <SelectValue placeholder="Select year" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {years.map((y) => (
+                                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {errorsA.gradYear && <p className="text-xs text-destructive">{errorsA.gradYear.message as any}</p>}
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="linkedin" className="text-white/90">LinkedIn ID (optional)</Label>
+                        <Input id="linkedin" placeholder="linkedin-12345" {...regA('linkedinId')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                      </div>
+                      <Button className="w-full text-white border-0 bg-[#1e3a8a] hover:bg-[#1d4ed8]" disabled={submittingA} onClick={handleSubmitA(onAlumni)}>
+                        {submittingA ? 'Registering...' : 'Register as Alumni'}
+                      </Button>
+                      <div className="text-base text-center text-white/90">
+                        Already have an account? <Link className="text-primary underline" to="/">Sign in</Link>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="a_password">Password</Label>
-                  <Input id="a_password" type="password" placeholder="••••••••" {...regA("password")} />
-                  {errorsA.password && <p className="text-xs text-destructive">{errorsA.password.message}</p>}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-2">
-                    <Label>Season</Label>
-                    <Select onValueChange={(v) => setValueA("gradSeason", v as any)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select season" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {seasons.map((s) => (
-                          <SelectItem key={s} value={s}>{s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errorsA.gradSeason && <p className="text-xs text-destructive">{errorsA.gradSeason.message as any}</p>}
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Year</Label>
-                    <Select onValueChange={(v) => setValueA("gradYear", Number(v))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select year" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {years.map((y) => (
-                          <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errorsA.gradYear && <p className="text-xs text-destructive">{errorsA.gradYear.message as any}</p>}
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="linkedin">LinkedIn ID (optional)</Label>
-                  <Input id="linkedin" placeholder="linkedin-12345" {...regA("linkedinId")} />
-                </div>
-                <Button className="w-full" variant="brand" disabled={submittingA} onClick={handleSubmitA(onAlumni)}>
-                  {submittingA ? "Registering..." : "Register as Alumni"}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
       </div>
     </div>
   );
