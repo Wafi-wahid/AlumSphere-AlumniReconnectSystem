@@ -5,6 +5,7 @@ import multer = require('multer');
 import path from 'path';
 import { User } from '../models/User';
 import { Types } from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 
 export const userRouter = Router();
@@ -150,4 +151,41 @@ userRouter.post('/me/avatar', requireAuth, upload.single('avatar'), async (req, 
   const publicUrl = `${base}/uploads/${req.file.filename}`;
   await User.findByIdAndUpdate(userId, { $set: { profilePicture: publicUrl } });
   return res.json({ url: publicUrl });
+});
+
+// PATCH /me/password - change password
+userRouter.patch('/me/password', requireAuth, async (req, res) => {
+  const userId = (req as any).user.id as string;
+  if (!Types.ObjectId.isValid(userId)) {
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
+  const schema = z.object({ currentPassword: z.string().min(6), newPassword: z.string().min(6) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const doc = await User.findById(userId);
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+  const ok = await bcrypt.compare(parsed.data.currentPassword, doc.passwordHash);
+  if (!ok) return res.status(400).json({ error: 'Current password is incorrect' });
+  const hash = await bcrypt.hash(parsed.data.newPassword, 10);
+  await User.findByIdAndUpdate(userId, { $set: { passwordHash: hash } });
+  return res.json({ ok: true });
+});
+
+// PATCH /me/email - change email (requires password)
+userRouter.patch('/me/email', requireAuth, async (req, res) => {
+  const userId = (req as any).user.id as string;
+  if (!Types.ObjectId.isValid(userId)) {
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
+  const schema = z.object({ newEmail: z.string().email(), password: z.string().min(6) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const doc = await User.findById(userId);
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+  const ok = await bcrypt.compare(parsed.data.password, doc.passwordHash);
+  if (!ok) return res.status(400).json({ error: 'Password is incorrect' });
+  const exists = await User.findOne({ email: parsed.data.newEmail });
+  if (exists && String(exists._id) !== String(userId)) return res.status(400).json({ error: 'Email already in use' });
+  await User.findByIdAndUpdate(userId, { $set: { email: parsed.data.newEmail } });
+  return res.json({ ok: true, email: parsed.data.newEmail });
 });

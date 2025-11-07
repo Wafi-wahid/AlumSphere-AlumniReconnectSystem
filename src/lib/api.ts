@@ -28,4 +28,6 @@ export const AuthAPI = {
 export const UsersAPI = {
   me: () => api<{ user: any }>("/me"),
   updateMe: (payload: any) => api<{ user: any }>("/me", { method: 'PATCH', body: JSON.stringify(payload) }),
+  changePassword: (payload: { currentPassword: string; newPassword: string }) => api<{ ok: boolean }>("/me/password", { method: 'PATCH', body: JSON.stringify(payload) }),
+  changeEmail: (payload: { newEmail: string; password: string }) => api<{ ok: boolean; email: string }>("/me/email", { method: 'PATCH', body: JSON.stringify(payload) }),
 };

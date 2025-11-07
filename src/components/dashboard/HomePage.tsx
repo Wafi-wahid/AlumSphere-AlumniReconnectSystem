@@ -55,6 +55,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   const [profileComplete, setProfileComplete] = useState<boolean>(false);
   const [hasPost, setHasPost] = useState<boolean>(false);
   const [hasLiked, setHasLiked] = useState<boolean>(false);
+  const [showProfilePrompt, setShowProfilePrompt] = useState(false);
 
   const getNewBadges = (kind: 'connect'|'apply'|'request'|'host', count: number, current: string[]) => {
     const newOnes: string[] = [];
@@ -170,6 +171,18 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     });
     return () => unsub();
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (user?.role !== 'student') return;
+    if (profileComplete) { setShowProfilePrompt(false); return; }
+    try {
+      const dismissed = localStorage.getItem('student_profile_prompt_dismissed');
+      setShowProfilePrompt(dismissed !== '1');
+    } catch {
+      setShowProfilePrompt(true);
+    }
+  }, [user?.id, user?.role, profileComplete]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -352,6 +365,36 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   }, [likesData]);
   return (
     <div className="space-y-6">
+
+      {user?.role === 'student' && !profileComplete && showProfilePrompt && (
+        <Card className="border-2 border-amber-300/50 bg-amber-50/60 dark:bg-amber-900/10">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <div>
+              <CardTitle>Complete your profile</CardTitle>
+              <CardDescription>Set up your profile to get personalized recommendations.</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setShowProfilePrompt(false);
+                  try { localStorage.setItem('student_profile_prompt_dismissed', '1'); } catch {}
+                }}
+              >
+                Dismiss
+              </Button>
+              <Button
+                size="sm"
+                className="bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]"
+                onClick={() => onNavigate('profile')}
+              >
+                Set profile
+              </Button>
+            </div>
+          </CardHeader>
+        </Card>
+      )}
 
       {/* Hero Welcome */}
       <Card className="overflow-hidden rounded-3xl shadow-strong border-0 bg-gradient-to-br from-[#0b1b3a] to-[#1d4ed8]">
