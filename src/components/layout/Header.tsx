@@ -1,4 +1,4 @@
-import { Bell, MessageSquare, User, Menu, GraduationCap, X } from "lucide-react";
+import { Bell, MessageSquare, User, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -230,10 +230,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
           </Button>
           
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary-light rounded-lg flex items-center justify-center transition-transform duration-200 hover:scale-105">
-              <GraduationCap className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-xl text-foreground">AlumSphere</span>
+            <img src="/logo1.png" alt="Logo" className="w-16 h-16 md:w-20 md:h-20 rounded transition-transform duration-200 hover:scale-105" />
           </div>
         </div>
 

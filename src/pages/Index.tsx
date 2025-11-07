@@ -93,11 +93,11 @@ const Index = () => {
       <Header currentUser={user} onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
       
       <div className="flex">
-        {/* Sidebar */}
+        {/* Sidebar (fixed on all screens; toggled slide-in on mobile only) */}
         <div className={`
           fixed inset-y-0 left-4 top-16 z-30 w-20 transition-transform duration-300 ease-out
           ${sidebarOpen ? 'translate-x-0 shadow-md' : '-translate-x-full'}
-          md:relative md:top-0 md:translate-x-0 md:block md:shadow-none md:ml-4
+          md:fixed md:inset-y-0 md:left-4 md:top-16 md:translate-x-0 md:block md:shadow-none md:ml-0
         `}>
           <Navigation
             activeTab={activeTab}
