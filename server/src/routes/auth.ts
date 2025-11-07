@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { prisma } from '../prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
+import { User } from '../models/User';
+import { Types } from 'mongoose';
 
 export const authRouter = Router();
 
@@ -50,31 +51,29 @@ authRouter.post('/register', async (req, res) => {
     const parsed = role === 'student' ? studentSchema.parse(req.body) : alumniSchema.parse({ ...req.body, role: 'alumni' });
 
     // duplicates
-    const existingByEmail = await prisma.user.findUnique({ where: { email: parsed.email } });
+    const existingByEmail = await User.findOne({ email: parsed.email });
     if (existingByEmail) return res.status(409).json({ error: 'Email already registered' });
 
     if ('sapId' in parsed && parsed.sapId) {
-      const existingSap = await prisma.user.findUnique({ where: { sapId: parsed.sapId } });
+      const existingSap = await User.findOne({ sapId: parsed.sapId });
       if (existingSap) return res.status(409).json({ error: 'SAP ID already registered' });
     }
 
     const passwordHash = await bcrypt.hash(parsed.password, 10);
 
-    const user = await prisma.user.create({
-      data: {
-        name: parsed.name,
-        email: parsed.email,
-        passwordHash,
-        role: parsed.role,
-        sapId: 'sapId' in parsed ? parsed.sapId : null,
-        batchSeason: 'batchSeason' in parsed ? parsed.batchSeason : null,
-        batchYear: 'batchYear' in parsed ? parsed.batchYear : null,
-        gradSeason: 'gradSeason' in parsed ? parsed.gradSeason : null,
-        gradYear: 'gradYear' in parsed ? parsed.gradYear : null,
-        linkedinId: 'linkedinId' in parsed ? parsed.linkedinId ?? null : null,
-      },
-      select: { id: true, role: true, name: true, email: true, profilePicture: true },
+    const doc = await User.create({
+      name: parsed.name,
+      email: parsed.email,
+      passwordHash,
+      role: parsed.role,
+      sapId: 'sapId' in parsed ? (parsed as any).sapId : undefined,
+      batchSeason: 'batchSeason' in parsed ? (parsed as any).batchSeason : undefined,
+      batchYear: 'batchYear' in parsed ? (parsed as any).batchYear : undefined,
+      gradSeason: 'gradSeason' in parsed ? (parsed as any).gradSeason : undefined,
+      gradYear: 'gradYear' in parsed ? (parsed as any).gradYear : undefined,
+      linkedinId: 'linkedinId' in parsed ? (parsed as any).linkedinId ?? undefined : undefined,
     });
+    const user = { id: String(doc._id), role: doc.role, name: doc.name, email: doc.email, profilePicture: doc.profilePicture } as any;
 
     signAndSetCookie(res, { id: user.id, role: user.role });
     return res.status(201).json({ user });
@@ -90,13 +89,13 @@ const loginSchema = z.object({ email: z.string().email(), password: z.string().m
 authRouter.post('/login', async (req, res) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-    const ok = await bcrypt.compare(password, user.passwordHash);
+    const doc = await User.findOne({ email });
+    if (!doc) return res.status(401).json({ error: 'Invalid credentials' });
+    const ok = await bcrypt.compare(password, doc.passwordHash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
-    signAndSetCookie(res, { id: user.id, role: user.role });
-    return res.json({ user: { id: user.id, role: user.role, name: user.name, email: user.email, profilePicture: user.profilePicture } });
+    signAndSetCookie(res, { id: String(doc._id), role: doc.role });
+    return res.json({ user: { id: String(doc._id), role: doc.role, name: doc.name, email: doc.email, profilePicture: doc.profilePicture } });
   } catch (e: any) {
     if (e instanceof z.ZodError) return res.status(400).json({ error: e.flatten() });
     return res.status(500).json({ error: 'Login failed' });
@@ -112,7 +111,12 @@ authRouter.post('/logout', (req, res) => {
 // GET /auth/me
 authRouter.get('/me', requireAuth, async (req, res) => {
   const userId = (req as any).user.id as string;
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, name: true, email: true, profilePicture: true } });
+  if (!Types.ObjectId.isValid(userId)) {
+    // Legacy Prisma session id present — ask client to re-authenticate
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
+  const doc = await User.findById(userId).select({ _id: 1, role: 1, name: 1, email: 1, profilePicture: 1 });
+  const user = doc ? { id: String(doc._id), role: doc.role, name: doc.name, email: doc.email, profilePicture: doc.profilePicture } : null;
   if (!user) return res.status(404).json({ error: 'Not found' });
   return res.json({ user });
 });
@@ -170,9 +174,8 @@ authRouter.get('/linkedin/callback', requireAuth, async (req, res) => {
     const pic = picCandidates.length ? picCandidates[picCandidates.length - 1]?.identifiers?.[0]?.identifier : undefined;
 
     const userId = (req as any).user.id as string;
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
+    await User.findByIdAndUpdate(userId, {
+      $set: {
         name: `${first} ${last}`.trim() || undefined,
         email: email || undefined,
         profileHeadline: headline || undefined,

@@ -1,9 +1,10 @@
 import { Router, Request } from 'express';
-import { prisma } from '../prisma';
 import { requireAuth } from '../middleware/auth';
 import { z } from 'zod';
 import multer = require('multer');
 import path from 'path';
+import { User } from '../models/User';
+import { Types } from 'mongoose';
 
 
 export const userRouter = Router();
@@ -31,33 +32,34 @@ const upload = multer({ storage });
 // GET /me - current profile
 userRouter.get('/me', requireAuth, async (req, res) => {
   const userId = (req as any).user.id as string;
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      sapId: true,
-      batchSeason: true,
-      batchYear: true,
-      gradSeason: true,
-      gradYear: true,
-      linkedinId: true,
-      profilePicture: true,
-      program: true,
-      currentCompany: true,
-      skills: true,
-      profileHeadline: true,
-      location: true,
-      experienceYears: true,
-      profileCompleted: true,
-      mentorEligible: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
-  if (!user) return res.status(404).json({ error: 'Not found' });
+  if (!Types.ObjectId.isValid(userId)) {
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
+  const doc = (await User.findById(userId).lean()) as any;
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+  const user = {
+    id: String(doc._id),
+    name: doc.name,
+    email: doc.email,
+    role: doc.role,
+    sapId: doc.sapId,
+    batchSeason: doc.batchSeason,
+    batchYear: doc.batchYear,
+    gradSeason: doc.gradSeason,
+    gradYear: doc.gradYear,
+    linkedinId: doc.linkedinId,
+    profilePicture: doc.profilePicture,
+    program: doc.program,
+    currentCompany: doc.currentCompany,
+    skills: doc.skills,
+    profileHeadline: doc.profileHeadline,
+    location: doc.location,
+    experienceYears: doc.experienceYears,
+    profileCompleted: !!doc.profileCompleted,
+    mentorEligible: !!doc.mentorEligible,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+  } as any;
   return res.json({ user });
 });
 
@@ -83,17 +85,21 @@ const updateSchema = z.object({
 
 userRouter.patch('/me', requireAuth, async (req, res) => {
   const userId = (req as any).user.id as string;
+  if (!Types.ObjectId.isValid(userId)) {
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  // derive mentor eligibility and profile completion if experienceYears provided or other fields
+  const current = (await User.findById(userId).lean()) as any;
+  if (!current) return res.status(404).json({ error: 'Not found' });
+
   const data: any = { ...parsed.data };
   if (typeof parsed.data.experienceYears === 'number') {
     data.mentorEligible = parsed.data.experienceYears >= 4;
   }
-  // compute completion: require key fields
-  const current = await prisma.user.findUnique({ where: { id: userId } });
-  const candidate = { ...current, ...data } as any;
+
+  const candidate: any = { ...current, ...data };
   const requiredFilled = [
     candidate.name,
     candidate.program,
@@ -105,42 +111,43 @@ userRouter.patch('/me', requireAuth, async (req, res) => {
   ].every(Boolean);
   data.profileCompleted = !!requiredFilled;
 
-  const updated = await prisma.user.update({
-    where: { id: userId },
-    data,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      sapId: true,
-      batchSeason: true,
-      batchYear: true,
-      gradSeason: true,
-      gradYear: true,
-      linkedinId: true,
-      profilePicture: true,
-      program: true,
-      currentCompany: true,
-      skills: true,
-      profileHeadline: true,
-      location: true,
-      experienceYears: true,
-      profileCompleted: true,
-      mentorEligible: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
-  return res.json({ user: updated });
+  await User.findByIdAndUpdate(userId, { $set: data });
+  const doc = await User.findById(userId).lean();
+  const user = {
+    id: String(doc!._id),
+    name: doc!.name,
+    email: doc!.email,
+    role: doc!.role,
+    sapId: doc!.sapId,
+    batchSeason: doc!.batchSeason,
+    batchYear: doc!.batchYear,
+    gradSeason: doc!.gradSeason,
+    gradYear: doc!.gradYear,
+    linkedinId: doc!.linkedinId,
+    profilePicture: doc!.profilePicture,
+    program: doc!.program,
+    currentCompany: doc!.currentCompany,
+    skills: doc!.skills,
+    profileHeadline: doc!.profileHeadline,
+    location: doc!.location,
+    experienceYears: doc!.experienceYears,
+    profileCompleted: !!doc!.profileCompleted,
+    mentorEligible: !!doc!.mentorEligible,
+    createdAt: doc!.createdAt,
+    updatedAt: doc!.updatedAt,
+  } as any;
+  return res.json({ user });
 });
 
 // POST /me/avatar - upload profile picture
 userRouter.post('/me/avatar', requireAuth, upload.single('avatar'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   const userId = (req as any).user.id as string;
+  if (!Types.ObjectId.isValid(userId)) {
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
   const base = `${req.protocol}://${req.get('host')}`;
   const publicUrl = `${base}/uploads/${req.file.filename}`;
-  const updated = await prisma.user.update({ where: { id: userId }, data: { profilePicture: publicUrl } });
+  await User.findByIdAndUpdate(userId, { $set: { profilePicture: publicUrl } });
   return res.json({ url: publicUrl });
 });

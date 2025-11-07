@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { prisma } from '../prisma';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
+import { User } from '../models/User';
 
 export const adminRouter = Router();
 
@@ -27,8 +27,11 @@ adminRouter.patch('/users/:id/category', requireAuth, requireRole('super_admin')
   const parsed = updateCategorySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { adminCategory } = parsed.data as { adminCategory?: string | null };
-  const user = await prisma.user.update({ where: { id }, data: { adminCategory: adminCategory ?? null }, select: { id: true, name: true, email: true, role: true, adminCategory: true } });
-  return res.json({ user });
+  const doc = await User.findByIdAndUpdate(id, { $set: { adminCategory: adminCategory ?? undefined } }, { new: true })
+    .select({ _id: 1, name: 1, email: 1, role: 1, adminCategory: 1 })
+    .lean() as any;
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+  return res.json({ user: { id: String(doc._id), name: doc.name, email: doc.email, role: doc.role, adminCategory: doc.adminCategory } });
 });
 
 // Only super_admin can create admin accounts
@@ -37,23 +40,18 @@ adminRouter.post('/users', requireAuth, requireRole('super_admin'), async (req, 
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { name, email, password } = parsed.data;
 
-  const exists = await prisma.user.findUnique({ where: { email } });
+  const exists = await User.findOne({ email }).lean();
   if (exists) return res.status(409).json({ error: 'Email already registered' });
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await prisma.user.create({
-    data: { name, email, passwordHash, role: 'admin' },
-    select: { id: true, name: true, email: true, role: true },
-  });
-  return res.status(201).json({ user });
+  const doc = await User.create({ name, email, passwordHash, role: 'admin' });
+  return res.status(201).json({ user: { id: String(doc._id), name: doc.name, email: doc.email, role: doc.role } });
 });
 
 // List users for role management
 adminRouter.get('/users', requireAuth, requireRole('super_admin'), async (_req, res) => {
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, name: true, email: true, role: true },
-  });
+  const docs = await User.find({}).sort({ createdAt: -1 }).select({ _id: 1, name: 1, email: 1, role: 1 }).lean() as any[];
+  const users = docs.map(d => ({ id: String(d._id), name: d.name, email: d.email, role: d.role }));
   return res.json({ users });
 });
 
@@ -61,7 +59,7 @@ adminRouter.get('/users', requireAuth, requireRole('super_admin'), async (_req, 
 adminRouter.post('/sync-firebase-uid', requireAuth, requireRole('super_admin'), async (req, res) => {
   const { userId } = req.body as { userId?: string };
   if (!userId) return res.status(400).json({ error: 'userId required' });
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await User.findById(userId).lean() as any;
   if (!user) return res.status(404).json({ error: 'Not found' });
   try {
     // Lazy-load firebase-admin so server doesn't crash if not installed/configured
@@ -88,7 +86,7 @@ adminRouter.post('/sync-firebase-uid', requireAuth, requireRole('super_admin'), 
       fbUser = await admin.auth().createUser({ displayName: user.name });
     }
     // Return uid without persisting if schema doesn't have firebaseUid
-    return res.json({ user: { id: user.id, firebaseUid: fbUser.uid } });
+    return res.json({ user: { id: String(user._id), firebaseUid: fbUser.uid } });
   } catch (e: any) {
     return res.status(500).json({ error: e.message || 'Sync failed' });
   }
@@ -99,26 +97,17 @@ adminRouter.get('/users/alumni-search', requireAuth, requireRole('admin','super_
   const parsed = alumniSearchSchema.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { q, skill, company, location } = parsed.data;
-  const orQuery: any[] = [];
+  const and: any[] = [{ role: 'alumni' }];
   if (q) {
-    orQuery.push({ name: { contains: q } });
-    orQuery.push({ email: { contains: q } });
+    const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    and.push({ $or: [{ name: rx }, { email: rx }] });
   }
-  const where: any = {
-    role: 'alumni',
-    AND: [
-      orQuery.length ? { OR: orQuery } : {},
-      company ? { currentCompany: { contains: company } } : {},
-      location ? { location: { contains: location } } : {},
-      skill ? { skills: { contains: skill } } : {},
-    ],
-  };
-  const users = await prisma.user.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, name: true, email: true, role: true, currentCompany: true, skills: true, location: true },
-    take: 50,
-  });
+  if (company) and.push({ currentCompany: new RegExp(company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+  if (location) and.push({ location: new RegExp(location.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+  if (skill) and.push({ skills: new RegExp(skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+  const where = and.length ? { $and: and } : {};
+  const docs = await User.find(where).sort({ createdAt: -1 }).limit(50).select({ _id: 1, name: 1, email: 1, role: 1, currentCompany: 1, skills: 1, location: 1 }).lean() as any[];
+  const users = docs.map(d => ({ id: String(d._id), name: d.name, email: d.email, role: d.role, currentCompany: d.currentCompany, skills: d.skills, location: d.location }));
   return res.json({ users });
 });
 
@@ -130,6 +119,7 @@ adminRouter.patch('/users/:id/role', requireAuth, requireRole('super_admin'), as
   const parsed = updateRoleSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { role } = parsed.data;
-  const user = await prisma.user.update({ where: { id }, data: { role }, select: { id: true, name: true, email: true, role: true } });
-  return res.json({ user });
+  const doc = await User.findByIdAndUpdate(id, { $set: { role } }, { new: true }).select({ _id: 1, name: 1, email: 1, role: 1 }).lean() as any;
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+  return res.json({ user: { id: String(doc._id), name: doc.name, email: doc.email, role: doc.role } });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Calendar, Heart, Star, Clock, Video, MessageCircle, CheckCircle, Building2, Briefcase, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,11 +72,41 @@ export function MentorshipPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [topic, setTopic] = useState<string>("all");
-  const [batch, setBatch] = useState<string>("all");
-  const [minRating, setMinRating] = useState<string>("all");
+  const [skill, setSkill] = useState<string>("all");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [companyFilter, setCompanyFilter] = useState<string>("");
+  const [department, setDepartment] = useState<string>("all");
+  const [ratingMin, setRatingMin] = useState<string>("all");
   const [showRequestDialog, setShowRequestDialog] = useState(false);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentTab, setCurrentTab] = useState<'find'|'requests'|'sessions'>('find');
+  const searchSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const handleFindMentorsClick = () => {
+    setCurrentTab('find');
+    // smooth scroll to search bar
+    requestAnimationFrame(() => {
+      searchSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const handleOpenFiltersClick = () => {
+    setCurrentTab('find');
+    setShowFilters(true);
+    requestAnimationFrame(() => {
+      searchSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const resetFilters = () => {
+    setSearchQuery("");
+    setSkill('all');
+    setRoleFilter('all');
+    setCompanyFilter('');
+    setDepartment('all');
+    setRatingMin('all');
+  };
   const [selectedMentor, setSelectedMentor] = useState<typeof mockMentors[0] | null>(null);
   const [requestForm, setRequestForm] = useState({
     topic: "",
@@ -131,12 +161,12 @@ export function MentorshipPage() {
     }
   };
 
-  // Load mentors from Cloud Function; fallback to mock
+  // Load mentors from API; fallback to mock
   useEffect(() => {
     (async () => {
       setLoadingMentors(true);
       try {
-        const res = await MentorshipAPI.listMentors({ q: searchQuery || undefined, topic: topic !== 'all' ? topic : undefined, batch: batch !== 'all' ? batch : undefined, ratingMin: minRating !== 'all' ? parseFloat(minRating) : undefined });
+        const res = await MentorshipAPI.listMentors({ q: searchQuery || undefined });
         setMentors(res.items || []);
       } catch {
         setMentors(mockMentors as any);
@@ -144,11 +174,11 @@ export function MentorshipPage() {
         setLoadingMentors(false);
       }
     })();
-  }, [searchQuery, topic, batch, minRating]);
+  }, [searchQuery]);
 
   const filteredMentors = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const r = minRating === "all" ? 0 : parseFloat(minRating);
+    const r = ratingMin === "all" ? 0 : parseFloat(ratingMin);
     const source = Array.isArray(mentors) && mentors.length ? mentors : (mockMentors as any);
     return source.filter((m: any) => {
       const matchesSearch =
@@ -158,79 +188,132 @@ export function MentorshipPage() {
         String(m.role||m.title||'').toLowerCase().includes(q) ||
         (Array.isArray(m.skills||m.expertise) ? (m.skills||m.expertise).some((e: string) => String(e).toLowerCase().includes(q)) : false);
       const expertise = (Array.isArray(m.skills||m.expertise) ? (m.skills||m.expertise).map((e: string)=>String(e).toLowerCase()) : []);
-      const matchesTopic = topic === "all" || expertise.includes(topic);
-      const matchesBatch = batch === "all" || String(m.batch||m.batchYear||'') === batch;
+      const matchesSkill = skill === 'all' || expertise.includes(skill.toLowerCase());
+      const matchesRole = roleFilter === 'all' || String(m.role||m.title||'').toLowerCase().includes(roleFilter.toLowerCase());
+      const matchesCompany = !companyFilter || String(m.company||'').toLowerCase().includes(companyFilter.toLowerCase());
+      const dep = String(m.program||m.department||'').toLowerCase();
+      const matchesDept = department === 'all' || dep.includes(department.toLowerCase());
       const matchesRating = Number(m.rating||m.ratingAvg||0) >= r;
-      return matchesSearch && matchesTopic && matchesBatch && matchesRating;
+      return matchesSearch && matchesSkill && matchesRole && matchesCompany && matchesDept && matchesRating;
     });
-  }, [searchQuery, topic, batch, minRating, mentors]);
+  }, [searchQuery, skill, roleFilter, companyFilter, department, ratingMin, mentors]);
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold" style={{ color: "#E5E7EB" }}>Mentorship Directory</h1>
-        <p className="text-sm" style={{ color: "#E5E7EB" }}>
-          Find alumni mentors for career guidance and professional development
-        </p>
-      </div>
+      {/* Hero */}
+      <Card className="overflow-hidden rounded-3xl shadow-strong border-0 bg-gradient-to-br from-[#0b1b3a] to-[#1d4ed8]">
+        <div className="grid grid-cols-1 lg:grid-cols-3">
+          <div className="lg:col-span-2 p-6 md:p-10 text-white">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur px-3 py-1 text-xs">
+                <Star className="h-3.5 w-3.5" /> Mentorship
+              </div>
+              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Find your mentor</h1>
+              <p className="text-white/80">Discover alumni mentors for guidance, interviews, and career strategy.</p>
+            </div>
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60" onClick={handleFindMentorsClick}>
+                Find Mentors
+              </Button>
+              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60" onClick={() => setCurrentTab('requests')}>
+                My Requests
+              </Button>
+            </div>
+          </div>
+          <div className="relative">
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_30%_20%,white_0%,transparent_40%)]" />
+            <div className="relative h-full w-full p-6 md:p-8 flex items-center justify-center">
+              <div className="rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 p-6 text-white text-center max-w-xs space-y-3">
+                <div className="text-sm opacity-90">Tip</div>
+                <div className="text-lg font-semibold">Use filters to find the perfect match</div>
+                <Button className="h-9 bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a] w-full" onClick={handleOpenFiltersClick}>
+                  Open Filters
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
 
-      <Tabs defaultValue="find" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="find">Find Mentors</TabsTrigger>
-          <TabsTrigger value="requests">My Requests ({mockRequests.length})</TabsTrigger>
-          <TabsTrigger value="sessions">Upcoming Sessions ({mockSessions.length})</TabsTrigger>
-        </TabsList>
+      <Tabs value={currentTab} onValueChange={(v) => setCurrentTab(v as any)} className="space-y-6">
 
         <TabsContent value="find" className="space-y-4">
-          {/* Filters Bar */}
-          <Card className="border border-white/10" style={{ backgroundColor: "#0A1A3D" }}>
-            <CardContent className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="relative md:col-span-2">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "#E5E7EB" }} />
+          {/* Search + Filter toggle */}
+          <Card className="rounded-2xl bg-background border border-border dark:border-0 dark:bg-white/5">
+            <CardContent className="p-6 space-y-4" ref={searchSectionRef}>
+              <div className="flex flex-col md:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-white/80" />
                   <Input
-                    placeholder="Search by name, expertise, or company"
+                    placeholder="Search mentors by name, expertise, or company"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 border-white/20 focus-visible:ring-1"
-                    style={{ backgroundColor: "transparent", color: "#E5E7EB" }}
+                    className="pl-10 bg-background text-foreground placeholder:text-muted-foreground border border-border focus-visible:ring-2 focus-visible:ring-ring dark:border-white/20 dark:bg-white/5 dark:text-white dark:placeholder:text-white/70 dark:focus-visible:ring-white/40"
                   />
                 </div>
-                <Select value={topic} onValueChange={setTopic}>
-                  <SelectTrigger className="border-white/20" style={{ backgroundColor: "transparent", color: "#E5E7EB" }}>
-                    <SelectValue placeholder="Topic" />
+                <div className="flex flex-col gap-2 w-full md:w-auto">
+                  <Button variant="outline" className="h-10 px-5 rounded-xl border-border text-foreground hover:bg-accent/50 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-ring dark:focus-visible:ring-white/60" onClick={() => setShowFilters(v => !v)}>
+                    {showFilters ? 'Hide Filters' : 'Apply Filters'}
+                  </Button>
+                </div>
+              </div>
+              <div className={`grid grid-cols-1 md:grid-cols-6 gap-4 overflow-hidden transition-all duration-300 ${showFilters ? 'max-h-[320px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                <Select value={skill} onValueChange={setSkill}>
+                  <SelectTrigger className="border border-border bg-background text-foreground dark:border-white/20 dark:bg-white/5 dark:text-white">
+                    <SelectValue placeholder="Skill" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Topics</SelectItem>
-                    <SelectItem value="career guidance">Career Guidance</SelectItem>
-                    <SelectItem value="technical skills">Technical Skills</SelectItem>
-                    <SelectItem value="interview prep">Interview Prep</SelectItem>
-                    <SelectItem value="product strategy">Product Strategy</SelectItem>
-                    <SelectItem value="leadership">Leadership</SelectItem>
-                    <SelectItem value="career transition">Career Transition</SelectItem>
+                    <SelectItem value="all">Any Skill</SelectItem>
+                    <SelectItem value="react">React</SelectItem>
+                    <SelectItem value="ui">UI</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={batch} onValueChange={setBatch}>
-                  <SelectTrigger className="border-white/20" style={{ backgroundColor: "transparent", color: "#E5E7EB" }}>
-                    <SelectValue placeholder="Batch" />
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="border border-border bg-background text-foreground dark:border-white/20 dark:bg-white/5 dark:text-white">
+                    <SelectValue placeholder="Role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Batches</SelectItem>
-                    <SelectItem value="2015">Batch 2015</SelectItem>
-                    <SelectItem value="2017">Batch 2017</SelectItem>
+                    <SelectItem value="all">Any Role</SelectItem>
+                    <SelectItem value="developer">Developer</SelectItem>
+                    <SelectItem value="tester">Tester</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={minRating} onValueChange={setMinRating}>
-                  <SelectTrigger className="border-white/20" style={{ backgroundColor: "transparent", color: "#E5E7EB" }}>
+                <Input
+                  placeholder="Company"
+                  value={companyFilter}
+                  onChange={(e) => setCompanyFilter(e.target.value)}
+                  className="bg-background text-foreground placeholder:text-muted-foreground border border-border dark:border-white/20 dark:bg-white/5 dark:text-white dark:placeholder:text-white/70"
+                />
+                <Select value={department} onValueChange={setDepartment}>
+                  <SelectTrigger className="border border-border bg-background text-foreground dark:border-white/20 dark:bg-white/5 dark:text-white">
+                    <SelectValue placeholder="Department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Any Department</SelectItem>
+                    <SelectItem value="software engineering">Software Engineering</SelectItem>
+                    <SelectItem value="computer science">Computer Science</SelectItem>
+                    <SelectItem value="computer arts">Computer Arts</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={ratingMin} onValueChange={setRatingMin}>
+                  <SelectTrigger className="border border-border bg-background text-foreground dark:border-white/20 dark:bg-white/5 dark:text-white">
                     <SelectValue placeholder="Rating" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Any Rating</SelectItem>
-                    <SelectItem value="4">4.0+</SelectItem>
-                    <SelectItem value="4.5">4.5+</SelectItem>
-                    <SelectItem value="4.8">4.8+</SelectItem>
+                    <SelectItem value="1">1+</SelectItem>
+                    <SelectItem value="2">2+</SelectItem>
+                    <SelectItem value="3">3+</SelectItem>
+                    <SelectItem value="4">4+</SelectItem>
                   </SelectContent>
                 </Select>
+                <Button
+                  variant="outline"
+                  className="h-10 rounded-xl border border-border text-foreground hover:bg-accent/50 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-ring dark:focus-visible:ring-white/60"
+                  onClick={resetFilters}
+                >
+                  Reset
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -245,8 +328,7 @@ export function MentorshipPage() {
               {filteredMentors.map((mentor) => (
                 <Card
                   key={mentor.id}
-                  className="group relative overflow-hidden border-white/10 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl"
-                  style={{ background: "linear-gradient(180deg, rgba(10,26,61,0.85), rgba(10,26,61,0.65))" }}
+                  className="group relative overflow-hidden rounded-2xl transition-all duration-300 hover:-translate-y-0.5 hover:shadow-strong border bg-card text-card-foreground dark:bg-gradient-to-b dark:from-[#0A1A3D]/80 dark:to-[#0A1A3D]/60"
                 >
                   <CardContent className="p-6 space-y-5">
                     <div className="flex items-start gap-4">
@@ -256,18 +338,18 @@ export function MentorshipPage() {
                       </Avatar>
                       <div className="flex-1 space-y-1">
                         <div className="flex items-center justify-between">
-                          <h3 className="font-semibold" style={{ color: "#E5E7EB" }}>{mentor.name}</h3>
+                          <h3 className="font-semibold text-foreground dark:text-[#E5E7EB]">{mentor.name}</h3>
                           <Button size="sm" variant="ghost" onClick={() => handleOpenProfile(mentor)} className="text-xs hover:underline" style={{ color: "#007BFF" }}>
                             View Profile
                           </Button>
                         </div>
-                        <div className="flex items-center gap-2 text-xs" style={{ color: "#E5E7EB" }}>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-[#E5E7EB]">
                           <Briefcase className="h-3 w-3" /> {mentor.role}
                         </div>
-                        <div className="flex items-center gap-2 text-xs" style={{ color: "#E5E7EB" }}>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-[#E5E7EB]">
                           <Building2 className="h-3 w-3" /> {mentor.company} • Batch {mentor.batch}
                         </div>
-                        <div className="flex items-center gap-1 text-xs" style={{ color: "#E5E7EB" }}>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground dark:text-[#E5E7EB]">
                           <Star className="h-3 w-3" style={{ color: "#FFC300" }} />
                           {mentor.rating} • {mentor.sessions} sessions
                         </div>
@@ -276,28 +358,31 @@ export function MentorshipPage() {
 
                     <div className="flex flex-wrap gap-1.5">
                       {mentor.expertise.map((exp) => (
-                        <Badge key={exp} variant="outline" className="text-[10px] border-white/20" style={{ color: "#E5E7EB" }}>
+                        <Badge
+                          key={exp}
+                          variant="outline"
+                          className="text-[10px] border border-border text-foreground/80 dark:border-white/20 dark:text-[#E5E7EB]"
+                        >
                           {exp}
                         </Badge>
                       ))}
                     </div>
 
                     {mentor.available && (
-                      <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: "rgba(0,123,255,0.12)", color: "#E5E7EB" }}>
+                      <div className="flex items-center gap-2 p-2 rounded-lg text-foreground dark:text-[#E5E7EB]" style={{ backgroundColor: "rgba(0,123,255,0.12)" }}>
                         <CheckCircle className="h-4 w-4" style={{ color: "#007BFF" }} />
                         <p className="text-xs">Next available: {mentor.nextSlot}</p>
                       </div>
                     )}
 
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="flex-1 border-white/20" style={{ color: "#E5E7EB" }}>
+                      <Button size="sm" variant="outline" className="flex-1 border border-border text-foreground hover:bg-accent/50 dark:border-white/20 dark:text-white dark:hover:bg-white/10">
                         <MessageCircle className="h-4 w-4 mr-2" />
                         Message
                       </Button>
                       <Button
                         size="sm"
-                        className="flex-1"
-                        style={{ backgroundColor: "#FFC300", color: "#0A1A3D" }}
+                        className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-[#0A1A3D]"
                         onClick={() => handleOpenProfile(mentor)}
                         disabled={!!user && user.role !== 'student'}
                         title={!!user && user.role !== 'student' ? "Only students can request mentorship (mentors need love too 💙)" : undefined}
