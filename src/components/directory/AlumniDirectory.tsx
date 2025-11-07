@@ -7,7 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query } from "firebase/firestore";
+import { collection, onSnapshot, query, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { useAuth } from "@/store/auth";
+import { toast } from "sonner";
 
 const mockAlumni = [
   {
@@ -205,6 +208,7 @@ const mockAlumni = [
 ];
 
 export function AlumniDirectory() {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState({
     year: "all",
@@ -215,6 +219,9 @@ export function AlumniDirectory() {
   const [audience, setAudience] = useState<"alumni" | "students">("alumni");
   const [people, setPeople] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
+  const [visibleCount, setVisibleCount] = useState(24);
+  const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
+  const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const qUsers = query(collection(db, "users"));
@@ -224,6 +231,18 @@ export function AlumniDirectory() {
     });
     return () => unsub();
   }, []);
+
+  // Subscribe to my connection state for duplicate guards
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsubSent = onSnapshot(collection(db, 'connections', user.id, 'sent'), (snap) => {
+      setSentRequests(new Set(snap.docs.map((d) => d.id)));
+    });
+    const unsubAcc = onSnapshot(collection(db, 'connections', user.id, 'accepted'), (snap) => {
+      setAcceptedIds(new Set(snap.docs.map((d) => d.id)));
+    });
+    return () => { unsubSent(); unsubAcc(); };
+  }, [user?.id]);
 
   useEffect(() => {
     const qProfiles = query(collection(db, "profiles"));
@@ -256,8 +275,30 @@ export function AlumniDirectory() {
         mentoringSessions: p.mentoringSessions ?? (u.mentoringSessions || 0),
         isCurrentStudent: (p.isCurrentStudent ?? u.isCurrentStudent) ? true : (u.role === 'student'),
         roleCategory: (p.role === 'student' || p.isCurrentStudent || u.role === 'student' || u.isCurrentStudent) ? 'student' : 'alumni',
+        visible: p.visible,
       };
     });
+    const peopleIds = new Set((people || []).map((u: any) => u.id));
+    const extraProfiles = Object.entries(profiles || {})
+      .filter(([pid]) => !peopleIds.has(pid))
+      .map(([pid, p]: any) => ({
+        id: pid,
+        name: p.name || "Unnamed",
+        avatar: p.avatar || p.photoURL || "",
+        company: p.company || "",
+        role: p.role || p.title || "",
+        graduationYear: p.graduationYear || "",
+        department: p.department || "",
+        location: p.location || p.city || "",
+        skills: Array.isArray(p.skills) ? p.skills : [],
+        mentorAvailable: !!p.mentorAvailable,
+        linkedinSynced: !!p.linkedinSynced,
+        rating: p.rating || 0,
+        mentoringSessions: p.mentoringSessions || 0,
+        isCurrentStudent: !!p.isCurrentStudent,
+        roleCategory: (p.role === 'student' || p.isCurrentStudent) ? 'student' : 'alumni',
+        visible: p.visible,
+      }));
     const mockMapped = mockAlumni.map((m: any) => ({
       id: `mock-${m.id}`,
       name: m.name,
@@ -275,10 +316,12 @@ export function AlumniDirectory() {
       isCurrentStudent: false,
       roleCategory: 'alumni',
     }));
-    return [...all, ...mockMapped];
+    return [...all, ...extraProfiles, ...mockMapped];
   }, [people, profiles]);
 
   const filteredAlumni = items.filter((alumni: any) => {
+    const isVisible = alumni.visible !== false; // default to visible when undefined
+    if (!isVisible) return false;
     const matchAudience = audience === 'alumni' ? alumni.roleCategory === 'alumni' : (alumni.isCurrentStudent || alumni.roleCategory === 'student');
 
     const matchesSearch = (alumni.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -293,6 +336,12 @@ export function AlumniDirectory() {
 
     return matchAudience && matchesSearch && matchesYear && matchesDepartment && matchesLocation && matchesMentor;
   });
+
+  const visibleAlumni = useMemo(() => filteredAlumni.slice(0, visibleCount), [filteredAlumni, visibleCount]);
+
+  useEffect(() => {
+    setVisibleCount(24);
+  }, [searchQuery, filters, audience]);
 
   return (
     <div className="space-y-6">
@@ -407,15 +456,16 @@ export function AlumniDirectory() {
         {filteredAlumni.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">No results match your filters.</div>
         ) : (
+        <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredAlumni.map((alumni: any) => (
+          {visibleAlumni.map((alumni: any) => (
             <Card key={alumni.id} className="hover:shadow-md transition-shadow cursor-pointer group">
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-start gap-4">
                   <Avatar className="h-16 w-16">
                     <AvatarImage src={alumni.avatar} alt={alumni.name} />
                     <AvatarFallback>
-                      {alumni.name.split(' ').map(n => n[0]).join('')}
+                      {alumni.name.split(' ').map((n: string) => n[0]).join('')}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 space-y-1">
@@ -424,9 +474,7 @@ export function AlumniDirectory() {
                         {alumni.name}
                       </h3>
                       {alumni.linkedinSynced && (
-                        <Badge variant="secondary" className="text-xs">
-                          LinkedIn
-                        </Badge>
+                        <Badge variant="secondary" className="text-xs">LinkedIn</Badge>
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground">{alumni.role}</p>
@@ -445,42 +493,70 @@ export function AlumniDirectory() {
                   </div>
                 </div>
 
-                {/* Skills */}
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-1">
-                    {alumni.skills.slice(0, 3).map((skill) => (
-                      <Badge key={skill} variant="outline" className="text-xs">
-                        {skill}
-                      </Badge>
-                    ))}
-                    {alumni.skills.length > 3 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{alumni.skills.length - 3} more
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                {/* Mentor Info */}
-                {alumni.mentorAvailable && (
-                  <div className="flex items-center gap-2 p-2 bg-success/10 rounded-lg">
-                    <Heart className="h-4 w-4 text-success" />
-                    <div className="text-sm">
-                      <p className="font-medium text-success">Available for mentoring</p>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                        {alumni.rating} • {alumni.mentoringSessions} sessions
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {/* Actions */}
                 <div className="flex gap-2">
-                  <Button size="sm" className="flex-1">
-                    <MessageCircle className="h-4 w-4 mr-2" />
-                    Connect
-                  </Button>
+                  {(() => {
+                    const id = String(alumni.id);
+                    const isConnected = acceptedIds.has(id);
+                    const isSent = sentRequests.has(id);
+                    if (!user?.id || id === String(user.id)) {
+                      return (
+                        <Button size="sm" className="flex-1" disabled>
+                          <MessageCircle className="h-4 w-4 mr-2" />
+                          Connect
+                        </Button>
+                      );
+                    }
+                    if (isConnected) {
+                      return (
+                        <Button size="sm" variant="outline" className="flex-1" onClick={async () => {
+                          try { await deleteDoc(doc(db, 'connections', user.id, 'accepted', id)); } catch {}
+                          try { await deleteDoc(doc(db, 'connections', id, 'accepted', user.id)); } catch {}
+                          toast.message('Connection removed');
+                        }}>
+                          Remove Connection
+                        </Button>
+                      );
+                    }
+                    if (isSent) {
+                      return (
+                        <Button size="sm" variant="outline" className="flex-1" onClick={async () => {
+                          try { await deleteDoc(doc(db, 'connections', user.id, 'sent', id)); } catch {}
+                          try { await deleteDoc(doc(db, 'connections', id, 'requests', user.id)); } catch {}
+                          toast.message('Request cancelled');
+                        }}>
+                          Cancel Request
+                        </Button>
+                      );
+                    }
+                    return (
+                      <Button size="sm" className="flex-1 text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={async () => {
+                        const authUid = getAuth().currentUser?.uid || String(user?.id || "");
+                        if (!authUid) { toast.error('Not signed in'); return; }
+                        if (authUid === id) { toast.message('You cannot connect to yourself'); return; }
+                        try {
+                          await setDoc(doc(db, 'connections', id, 'requests', authUid), {
+                            id: authUid,
+                            name: user?.name || 'User',
+                            avatar: user?.avatar || '',
+                            createdAt: new Date(),
+                          });
+                          await setDoc(doc(db, 'connections', authUid, 'sent', id), {
+                            id,
+                            name: alumni?.name || 'Alumni',
+                            avatar: alumni?.avatar || '',
+                            createdAt: new Date(),
+                          });
+                          toast.success('Connection request sent');
+                        } catch (e:any) {
+                          toast.error(e?.message || 'Failed to send request');
+                        }
+                      }}>
+                        <MessageCircle className="h-4 w-4 mr-2" />
+                        Connect
+                      </Button>
+                    );
+                  })()}
                   {alumni.mentorAvailable && (
                     <Button size="sm" variant="outline" className="flex-1">
                       <Heart className="h-4 w-4 mr-2" />
@@ -492,6 +568,12 @@ export function AlumniDirectory() {
             </Card>
           ))}
         </div>
+        {filteredAlumni.length > visibleCount && (
+          <div className="flex justify-center">
+            <Button variant="outline" onClick={() => setVisibleCount((c) => c + 24)}>Load more</Button>
+          </div>
+        )}
+        </>
         )}
       </div>
     </div>

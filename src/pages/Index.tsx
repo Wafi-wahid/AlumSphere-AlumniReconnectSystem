@@ -12,6 +12,7 @@ import { MessagesPage } from "@/components/messages/MessagesPage";
 import { FameHub } from "@/components/fame/FameHub";
 import Profile from "@/pages/Profile";
 import { useAuth } from "@/store/auth";
+import { AdminDashboard } from "@/components/admin/AdminDashboard";
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -31,7 +32,7 @@ const Index = () => {
     }
     const saved = localStorage.getItem('preferredTab');
     if (saved) setActiveTab(saved);
-    else setActiveTab(user.role === 'admin' ? 'dashboard' : 'home');
+    else setActiveTab(user.role === 'admin' || user.role === 'super_admin' ? 'dashboard' : 'home');
   }, [user]);
 
   // React to URL ?tab=... to keep UI consistent without full route change
@@ -43,11 +44,20 @@ const Index = () => {
     }
   }, [location.search]);
 
+  // Central handler: update state and URL so effects don't fight each other
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(location.search);
+    params.set('tab', tab);
+    navigate({ pathname: "/", search: `?${params.toString()}` });
+    localStorage.setItem('preferredTab', tab);
+  };
+
 
   const renderContent = () => {
     switch (activeTab) {
       case "home":
-        return <HomePage user={user} onNavigate={setActiveTab} />;
+        return <HomePage user={user} onNavigate={handleTabChange} />;
       case "directory":
         return <AlumniDirectory />;
       case "mentorship":
@@ -66,15 +76,12 @@ const Index = () => {
         return <FameHub />;
       case "dashboard":
         return user?.role === 'admin' || user?.role === 'super_admin' ? (
-          <div className="space-y-6">
-            <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-            <p className="text-muted-foreground">Analytics and management tools (Coming soon)</p>
-          </div>
+          <AdminDashboard />
         ) : (
-          <HomePage user={user} onNavigate={setActiveTab} />
+          <HomePage user={user} onNavigate={handleTabChange} />
         );
       default:
-        return <HomePage user={user} onNavigate={setActiveTab} />;
+        return <HomePage user={user} onNavigate={handleTabChange} />;
     }
   };
 
@@ -86,15 +93,15 @@ const Index = () => {
       <Header currentUser={user} onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
       
       <div className="flex">
-        {/* Sidebar */}
+        {/* Sidebar (fixed on all screens; toggled slide-in on mobile only) */}
         <div className={`
-          fixed inset-y-0 left-0 top-16 z-30 w-64 transition-transform duration-300 ease-out
+          fixed inset-y-0 left-4 top-16 z-30 w-20 transition-transform duration-300 ease-out
           ${sidebarOpen ? 'translate-x-0 shadow-md' : '-translate-x-full'}
-          md:relative md:top-0 md:translate-x-0 md:block md:shadow-none
+          md:fixed md:inset-y-0 md:left-4 md:top-16 md:translate-x-0 md:block md:shadow-none md:ml-0
         `}>
           <Navigation
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={handleTabChange}
             userRole={user.role}
             className="h-full"
           />
@@ -109,7 +116,11 @@ const Index = () => {
         )}
 
         {/* Main Content */}
-        <main id="main-content" className="flex-1 p-6 md:p-8 md:ml-0 container mx-auto max-w-7xl">
+        <main
+          id="main-content"
+          className={`flex-1 p-6 md:p-8 container mx-auto max-w-7xl rounded-2xl transition-[padding] duration-300
+            md:pl-28 ${sidebarOpen ? 'pl-24' : ''}`}
+        >
           {renderContent()}
         </main>
       </div>

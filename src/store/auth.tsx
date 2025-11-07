@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       notifications: 0,
       messages: 0,
     });
-    localStorage.setItem('preferredTab', 'home');
+    localStorage.setItem('preferredTab', 'dashboard');
   };
 
   const registerAlumni: AuthContextValue['registerAlumni'] = async (payload) => {
@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       notifications: 0,
       messages: 0,
     });
-    localStorage.setItem('preferredTab', 'home');
+    localStorage.setItem('preferredTab', 'dashboard');
   };
 
   const value = useMemo(() => ({ user, loading, login, logout, refresh, registerStudent, registerAlumni }), [user, loading]);
