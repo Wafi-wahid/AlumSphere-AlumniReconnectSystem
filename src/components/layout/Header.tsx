@@ -1,4 +1,4 @@
-import { Bell, MessageSquare, User, Menu, X } from "lucide-react";
+import { Bell, MessageSquare, User, Menu, GraduationCap, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -248,6 +248,15 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                       className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs"
                     >
                       {Math.min(notifications.length, 9)}
+                    </Badge>
+                  )}
+                  {pendingReqCount > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="absolute -bottom-1 -right-1 h-4 min-w-4 rounded-full p-0 flex items-center justify-center text-[10px]"
+                      title={`${pendingReqCount} connection request${pendingReqCount>1?'s':''}`}
+                    >
+                      {Math.min(pendingReqCount, 9)}
                     </Badge>
                   )}
                   {pendingReqCount > 0 && (

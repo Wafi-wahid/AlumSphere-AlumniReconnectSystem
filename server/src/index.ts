@@ -7,8 +7,10 @@ import fs from 'fs';
 import { authRouter } from './routes/auth';
 import { adminRouter } from './routes/admin';
 import { userRouter } from './routes/users';
-import { prisma } from './prisma';
+import { mentorshipRouter } from './routes/mentorship';
 import bcrypt from 'bcryptjs';
+import './mongo';
+import { User } from './models/User';
 
 const app = express();
 
@@ -65,6 +67,7 @@ app.get('/', (_req, res) => res.json({ ok: true, service: 'echo-alum-link', time
 app.use('/auth', authRouter);
 app.use('/admin', adminRouter);
 app.use('/', userRouter);
+app.use('/', mentorshipRouter);
 
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err);
@@ -81,23 +84,18 @@ async function bootstrapSuperAdmin() {
     }
     return;
   }
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await User.findOne({ email }).lean() as any;
   const passwordHash = await bcrypt.hash(password, 10);
   if (!existing) {
-    await prisma.user.create({
-      data: { name, email, passwordHash, role: 'super_admin' },
-    });
+    await User.create({ name, email, passwordHash, role: 'super_admin' });
     console.log(`[bootstrap] Created super_admin ${email}`);
     return;
   }
   if (existing.role !== 'super_admin' || process.env.SUPER_ADMIN_RESET === '1') {
-    await prisma.user.update({
-      where: { email },
-      data: {
-        role: 'super_admin',
-        ...(process.env.SUPER_ADMIN_RESET === '1' ? { passwordHash } : {}),
-      },
-    });
+    await User.findOneAndUpdate(
+      { email },
+      { $set: { role: 'super_admin', ...(process.env.SUPER_ADMIN_RESET === '1' ? { passwordHash } : {}) } }
+    );
     console.log(`[bootstrap] Ensured super_admin role for ${email}${process.env.SUPER_ADMIN_RESET === '1' ? ' and reset password' : ''}`);
   }
 }

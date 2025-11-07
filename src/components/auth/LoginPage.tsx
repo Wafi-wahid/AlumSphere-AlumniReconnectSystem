@@ -5,21 +5,37 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { GraduationCap, Linkedin } from "lucide-react";
+import { GraduationCap, Linkedin, Eye, EyeOff, Info } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { toast } from "sonner";
 
 export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [role, setRole] = useState<"student_alumni" | "admin">("student_alumni");
+  const [role, setRole] = useState<"student" | "alumni" | "admin">("student");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const { login } = useAuth();
+  const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000';
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 20);
     return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem('login_guide_seen');
+      if (!seen) {
+        setShowGuide(true);
+        localStorage.setItem('login_guide_seen', '1');
+      }
+    } catch {
+      // ignore storage errors
+      setShowGuide(true);
+    }
   }, []);
 
   const handleLinkedInLogin = () => {
@@ -52,12 +68,31 @@ export function LoginPage() {
 
   return (
     <div className="relative min-h-screen bg-background">
-      {/* Three-shade gradient across whole page, starting top-left */}
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom_right,#0b1b3a_0%,#3b82f6_70%,#60a5fa_100%)]" />
+      {/* Gradient to match Register/Sidebar */}
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,#0b1b3a,#1e3a8a)]" />
       <div className={`relative grid min-h-screen grid-cols-1 md:grid-cols-2 gap-0 p-6 transition-all duration-700 ease-out ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}> 
         {/* Left: Form */}
         <div className="order-1 md:order-2 flex items-center justify-start">
           <div className="w-full max-w-md space-y-6">
+          {showGuide && (
+            <div className="flex items-start gap-3 rounded-xl border border-white/20 bg-white/15 text-white p-3 backdrop-blur-md shadow-[0_6px_24px_rgba(0,0,0,0.2)]">
+              <Info className="h-5 w-5 mt-0.5 text-[#FFB800]" />
+              <div className="text-sm leading-5">
+                <p className="font-semibold">Quick guide</p>
+                <p>Step 1: Select your role (Student, Alumni, or Admin).</p>
+                <p>Step 2: Enter your email and password to sign in.</p>
+                <p className="mt-1">First time here? Click <a href="/register" className="underline text-[#FFB800] hover:text-[#FFA726]">Create account</a> to register.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Dismiss guide"
+                className="ml-auto text-white/80 hover:text-white"
+                onClick={() => setShowGuide(false)}
+              >
+                ×
+              </button>
+            </div>
+          )}
           {/* Header */}
           <div className={`text-left space-y-1 transition-all duration-700 ease-out delay-100 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
             <h2 className="text-2xl font-semibold text-white">Welcome back</h2>
@@ -65,17 +100,24 @@ export function LoginPage() {
           </div>
 
           {/* Role selection */}
+          <div className="text-xs text-white/80 mb-1">Step 1: Choose your role</div>
           <Tabs value={role} onValueChange={(v) => setRole(v as typeof role)} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 rounded-full bg-white/10 border border-white/10 backdrop-blur-sm">
+            <TabsList className="grid w-full grid-cols-3 rounded-full bg-white/10 border border-white/10 backdrop-blur-sm">
               <TabsTrigger
-                value="student_alumni"
-                className="rounded-full text-white/80 transition-colors data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-white hover:data-[state=inactive]:bg-white/15"
+                value="student"
+                className="rounded-full text-white/90 transition-colors data-[state=active]:bg-[#FFB800] data-[state=active]:text-black hover:data-[state=inactive]:bg-white/15"
               >
-                Student/Alumni
+                Student
+              </TabsTrigger>
+              <TabsTrigger
+                value="alumni"
+                className="rounded-full text-white/90 transition-colors data-[state=active]:bg-[#FFB800] data-[state=active]:text-black hover:data-[state=inactive]:bg-white/15"
+              >
+                Alumni
               </TabsTrigger>
               <TabsTrigger
                 value="admin"
-                className="rounded-full text-white/80 transition-colors data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-white hover:data-[state=inactive]:bg-white/15"
+                className="rounded-full text-white/90 transition-colors data-[state=active]:bg-[#FFB800] data-[state=active]:text-black hover:data-[state=inactive]:bg-white/15"
               >
                 Admin
               </TabsTrigger>
@@ -83,7 +125,7 @@ export function LoginPage() {
           </Tabs>
 
           {/* Login Card */}
-          <Card className={`shadow-[0_8px_30px_rgba(0,0,0,0.2)] border border-white/10 bg-white/10 backdrop-blur-xl transition-all duration-700 ease-out delay-150 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+          <Card className={`shadow-[0_12px_40px_rgba(0,0,0,0.28)] border border-white/20 bg-white/15 backdrop-blur-2xl transition-all duration-700 ease-out delay-150 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
             <CardHeader className="space-y-1">
               <CardTitle className="text-white">Sign in to your account</CardTitle>
               <CardDescription className="text-white/80">Choose your preferred sign-in method</CardDescription>
@@ -93,15 +135,30 @@ export function LoginPage() {
               <div key={role} className="space-y-3 animate-in fade-in-50 slide-in-from-bottom-2">
                 <div className="grid gap-2">
                   <Label htmlFor="email" className="text-white/90">Email</Label>
-                  <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                  {role === 'student' && (
+                    <p className="text-xs text-white/70">Use your official university email</p>
+                  )}
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={role === 'student' ? '12345@students.riphah.edu.pk' : 'name@gmail.com'}
+                    className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30"
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="password" className="text-white/90">Password</Label>
-                  <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                  <div className="relative">
+                    <Input id="password" type={showPass ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="pr-10 bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                    <button type="button" aria-label="Toggle password visibility" onClick={() => setShowPass((v) => !v)} className="absolute inset-y-0 right-2 flex items-center text-white/80 hover:text-white">
+                      {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
                 <Button
                   variant="brand"
-                  className="w-full h-10 text-white border-0 bg-[#1e3a8a] hover:bg-[#1d4ed8]"
+                  className="w-full h-10 text-black border-0 bg-[#FFB800] hover:bg-[#FFA726]"
                   disabled={isLoading}
                   onClick={async () => {
                     try {
@@ -115,22 +172,45 @@ export function LoginPage() {
                     }
                   }}
                 >
-                  {role === 'admin' ? 'Sign In as Admin' : 'Sign In'}
+                  {role === 'admin' ? 'Sign In as Admin' : role === 'student' ? 'Sign In as Student' : 'Sign In as Alumni'}
                 </Button>
                 <div className="text-sm text-center text-white/90">
-                  Don’t have an account? <a className="underline text-[#1e3a8a] hover:text-[#1d4ed8]" href="/register">Create one</a>
+                  Don’t have an account? <a className="underline text-[#FFB800] hover:text-[#FFA726]" href="/register">Create account</a>
                 </div>
               </div>
 
-              {/* Social logins */}
+              {/* Separator */}
+              <div className="flex items-center gap-4 my-2">
+                <div className="h-px flex-1 bg-white/20" />
+                <span className="text-xs text-white/80">OR</span>
+                <div className="h-px flex-1 bg-white/20" />
+              </div>
+
+              {/* Social logins (official icons) */}
               <div className="flex items-center gap-2 justify-center">
-                <Button variant="outline" onClick={handleGoogleLogin} disabled={isLoading} aria-label="Continue with Google" className="gap-2 bg-white/5 border-white/10 text-white hover:bg-white/10">
-                  <svg aria-hidden="true" focusable="false" className="h-4 w-4" viewBox="0 0 24 24">
-                    <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.3 1.5-1.7 4.4-5.5 4.4-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.2.8 3.9 1.5l2.6-2.6C16.9 3.1 14.7 2 12 2 6.5 2 2 6.5 2 12s4.5 10 10 10c5.8 0 9.6-4.1 9.6-9.9 0-.7-.1-1.1-.2-1.6H12z" />
+                <Button
+                  variant="outline"
+                  onClick={() => { window.location.href = `${API_BASE}/auth/google/start`; }}
+                  disabled={isLoading}
+                  aria-label="Continue with Google"
+                  className="gap-2 bg-white/5 border-white/10 text-white hover:bg-white/10"
+                >
+                  {/* Official Google G icon SVG */}
+                  <svg className="h-4 w-4" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+                    <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.651-.389-3.917z"/>
+                    <path fill="#FF3D00" d="M6.306 14.691l6.571 4.817C14.431 16.087 18.878 13 24 13c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
+                    <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.197l-6.19-5.238C29.126 35.091 26.671 36 24 36c-5.202 0-9.619-3.317-11.282-7.946l-6.5 5.02C9.53 39.556 16.227 44 24 44z"/>
+                    <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.791 2.235-2.231 4.166-3.994 5.565l.003-.002 6.19 5.238C39.231 36.349 44 30.667 44 24c0-1.341-.138-2.651-.389-3.917z"/>
                   </svg>
                   Continue with Google
                 </Button>
-                <Button variant="outline" onClick={handleLinkedInLogin} disabled={isLoading} aria-label="Continue with LinkedIn" className="gap-2 bg-white/5 border-white/10 text-white hover:bg-white/10">
+                <Button
+                  variant="outline"
+                  onClick={() => { window.location.href = `${API_BASE}/auth/linkedin/login/start`; }}
+                  disabled={isLoading}
+                  aria-label="Continue with LinkedIn"
+                  className="gap-2 bg-white/5 border-white/10 text-white hover:bg-white/10"
+                >
                   <Linkedin className="h-4 w-4 text-[#0077b5]" />
                   Continue with LinkedIn
                 </Button>
