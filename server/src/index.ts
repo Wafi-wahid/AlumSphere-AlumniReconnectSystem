@@ -7,8 +7,10 @@ import fs from 'fs';
 import { authRouter } from './routes/auth';
 import { adminRouter } from './routes/admin';
 import { userRouter } from './routes/users';
+import { mentorshipRouter } from './routes/mentorship';
 import { prisma } from './prisma';
 import bcrypt from 'bcryptjs';
+import './mongo';
 
 const app = express();
 
@@ -65,6 +67,7 @@ app.get('/', (_req, res) => res.json({ ok: true, service: 'echo-alum-link', time
 app.use('/auth', authRouter);
 app.use('/admin', adminRouter);
 app.use('/', userRouter);
+app.use('/', mentorshipRouter);
 
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err);
