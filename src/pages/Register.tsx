@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useAuth } from "@/store/auth";
-import { GraduationCap, CheckCircle2 } from "lucide-react";
+import { GraduationCap, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { api } from "@/lib/api";
 
 const years = Array.from({ length: 2025 - 2010 + 1 }, (_, i) => 2010 + i);
 const seasons = ["Spring", "Fall"] as const;
@@ -48,10 +49,14 @@ export default function Register() {
   const { registerStudent, registerAlumni } = useAuth();
   const [tab, setTab] = useState<"student" | "alumni">("student");
   const [mounted, setMounted] = useState(false);
+  const [showPassS, setShowPassS] = useState(false);
+  const [showPassA, setShowPassA] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 20);
     return () => clearTimeout(t);
   }, []);
+
+  const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000';
 
   const {
     register: regS,
@@ -66,6 +71,47 @@ export default function Register() {
     setValue: setValueA,
     formState: { errors: errorsA, isSubmitting: submittingA },
   } = useForm<AlumniForm>({ resolver: zodResolver(alumniSchema) });
+
+  // Show LinkedIn error if present in URL and then clean it
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const liErr = url.searchParams.get('li_error');
+    if (liErr) {
+      toast.error(liErr);
+      url.searchParams.delete('li_error');
+      window.history.replaceState({}, document.title, url.toString());
+    }
+  }, []);
+
+  // Prefill from LinkedIn if available
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api<{ prefill: { name?: string; email?: string; profilePicture?: string; linkedinId?: string } | null }>("/auth/linkedin/prefill");
+        if (res?.prefill) {
+          const { name, email, linkedinId } = res.prefill;
+          if (name) {
+            setValueS('name', name, { shouldValidate: true });
+            setValueA('name', name, { shouldValidate: true });
+          }
+          if (email) {
+            setValueS('email', email, { shouldValidate: true });
+            setValueA('email', email, { shouldValidate: true });
+          }
+          if (linkedinId) {
+            setValueA('linkedinId', linkedinId, { shouldValidate: true });
+          }
+          toast.success('Imported info from LinkedIn');
+        }
+      } catch {
+        // ignore prefill fetch errors
+      }
+    })();
+  }, [setValueS, setValueA]);
+
+  const startLinkedIn = () => {
+    window.location.href = `${API_BASE}/auth/linkedin/register/start`;
+  };
 
   const onStudent = async (data: StudentForm) => {
     try {
@@ -106,7 +152,7 @@ export default function Register() {
   return (
     <div className="relative min-h-screen bg-background">
       {/* Gradient to match Login */}
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom_right,#0b1b3a_0%,#3b82f6_70%,#60a5fa_100%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,#0b1b3a,#1e3a8a)]" />
       <div className={`relative grid min-h-screen grid-cols-1 md:grid-cols-2 gap-0 p-6 transition-all duration-700 ease-out ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
         {/* Brand panel (left on desktop) */}
         <div className={`order-2 md:order-1 relative hidden md:flex items-center justify-center px-6 ${mounted ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4'} overflow-hidden`}>
@@ -132,18 +178,21 @@ export default function Register() {
           <div className="w-full max-w-md space-y-6">
             <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="w-full">
               <TabsList className="grid w-full grid-cols-2 rounded-full bg-white/10 border border-white/10 backdrop-blur-sm">
-                <TabsTrigger value="student" className="rounded-full text-white/80 transition-colors data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-white hover:data-[state=inactive]:bg-white/15">Student</TabsTrigger>
-                <TabsTrigger value="alumni" className="rounded-full text-white/80 transition-colors data-[state=active]:bg-[#1e3a8a] data-[state=active]:text-white hover:data-[state=inactive]:bg-white/15">Alumni</TabsTrigger>
+                <TabsTrigger value="student" className="rounded-full text-white/90 transition-colors data-[state=active]:bg-[#FFB800] data-[state=active]:text-black hover:data-[state=inactive]:bg-white/15">Student</TabsTrigger>
+                <TabsTrigger value="alumni" className="rounded-full text-white/90 transition-colors data-[state=active]:bg-[#FFB800] data-[state=active]:text-black hover:data-[state=inactive]:bg-white/15">Alumni</TabsTrigger>
               </TabsList>
 
               <TabsContent value="student">
                 <div key={tab} className="animate-in fade-in-50 slide-in-from-bottom-2">
-                  <Card className={`shadow-[0_8px_30px_rgba(0,0,0,0.2)] border border-white/10 bg-white/10 backdrop-blur-xl transition-all duration-700 ease-out delay-150 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+                  <Card className={`shadow-[0_12px_40px_rgba(0,0,0,0.28)] border border-white/20 bg-white/15 backdrop-blur-2xl transition-all duration-700 ease-out delay-150 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
                     <CardHeader>
                       <CardTitle className="text-white">Student Registration</CardTitle>
-                      <CardDescription className="text-white/80">Create your student account</CardDescription>
+                      <CardDescription className="text-white/80">If you are currently enrolled, fill this form. Otherwise, switch to Alumni registration.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      <Button type="button" onClick={startLinkedIn} className="w-full bg-[#0a66c2] hover:bg-[#084e96] text-white">
+                        Sync LinkedIn (prefill name & email)
+                      </Button>
                       <div className="grid gap-2">
                         <Label htmlFor="s_name" className="text-white/90">Full Name</Label>
                         <Input id="s_name" placeholder="John Doe" {...regS('name')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
@@ -151,17 +200,23 @@ export default function Register() {
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="s_email" className="text-white/90">Email</Label>
-                        <Input id="s_email" type="email" placeholder="you@university.edu" {...regS('email')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                        <p className="text-xs text-white/70">Use your official university email</p>
+                        <Input id="s_email" type="email" placeholder="12345@students.riphah.edu.pk" {...regS('email')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
                         {errorsS.email && <p className="text-xs text-destructive">{errorsS.email.message}</p>}
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="s_password" className="text-white/90">Password</Label>
-                        <Input id="s_password" type="password" placeholder="••••••••" {...regS('password')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                        <div className="relative">
+                          <Input id="s_password" type={showPassS ? 'text' : 'password'} placeholder="••••••••" {...regS('password')} className="pr-10 bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                          <button type="button" aria-label="Toggle password visibility" onClick={() => setShowPassS((v) => !v)} className="absolute inset-y-0 right-2 flex items-center text-white/80 hover:text-white">
+                            {showPassS ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
                         {errorsS.password && <p className="text-xs text-destructive">{errorsS.password.message}</p>}
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="s_sap" className="text-white/90">SAP ID</Label>
-                        <Input id="s_sap" placeholder="123456" {...regS('sapId')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                        <Input id="s_sap" placeholder="12345" {...regS('sapId')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
                         {errorsS.sapId && <p className="text-xs text-destructive">{errorsS.sapId.message}</p>}
                       </div>
                       <div className="grid grid-cols-2 gap-3">
@@ -194,11 +249,11 @@ export default function Register() {
                           {errorsS.batchYear && <p className="text-xs text-destructive">{errorsS.batchYear.message as any}</p>}
                         </div>
                       </div>
-                      <Button className="w-full text-white border-0 bg-[#1e3a8a] hover:bg-[#1d4ed8]" disabled={submittingS} onClick={handleSubmitS(onStudent)}>
+                      <Button className="w-full text-black border-0 bg-[#FFB800] hover:bg-[#FFA726]" disabled={submittingS} onClick={handleSubmitS(onStudent)}>
                         {submittingS ? 'Registering...' : 'Register as Student'}
                       </Button>
                       <div className="text-base text-center text-white/90">
-                        Already have an account? <Link className="underline text-[#1e3a8a] hover:text-[#1d4ed8]" to="/">Sign in</Link>
+                        Already have an account? <Link className="underline text-[#FFB800] hover:text-[#FFA726]" to="/">Sign in</Link>
                       </div>
                     </CardContent>
                   </Card>
@@ -207,12 +262,15 @@ export default function Register() {
 
               <TabsContent value="alumni">
                 <div key={tab} className="animate-in fade-in-50 slide-in-from-bottom-2">
-                  <Card className={`shadow-[0_8px_30px_rgba(0,0,0,0.2)] border border-white/10 bg-white/10 backdrop-blur-xl transition-all duration-700 ease-out delay-150 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+                  <Card className={`shadow-[0_12px_40px_rgba(0,0,0,0.28)] border border-white/20 bg-white/15 backdrop-blur-2xl transition-all duration-700 ease-out delay-150 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
                     <CardHeader>
                       <CardTitle className="text-white">Alumni Registration</CardTitle>
-                      <CardDescription className="text-white/80">Create your alumni account</CardDescription>
+                      <CardDescription className="text-white/80">If you have graduated, fill this form.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      <Button type="button" onClick={startLinkedIn} className="w-full bg-[#0a66c2] hover:bg-[#084e96] text-white">
+                        Sync LinkedIn (prefill name & email)
+                      </Button>
                       <div className="grid gap-2">
                         <Label htmlFor="a_name" className="text-white/90">Full Name</Label>
                         <Input id="a_name" placeholder="Sarah Johnson" {...regA('name')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
@@ -220,12 +278,18 @@ export default function Register() {
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="a_email" className="text-white/90">Email</Label>
+                        <p className="text-xs text-white/70">Use your official university email</p>
                         <Input id="a_email" type="email" placeholder="you@email.com" {...regA('email')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
                         {errorsA.email && <p className="text-xs text-destructive">{errorsA.email.message}</p>}
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="a_password" className="text-white/90">Password</Label>
-                        <Input id="a_password" type="password" placeholder="••••••••" {...regA('password')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                        <div className="relative">
+                          <Input id="a_password" type={showPassA ? 'text' : 'password'} placeholder="••••••••" {...regA('password')} className="pr-10 bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
+                          <button type="button" aria-label="Toggle password visibility" onClick={() => setShowPassA((v) => !v)} className="absolute inset-y-0 right-2 flex items-center text-white/80 hover:text-white">
+                            {showPassA ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
                         {errorsA.password && <p className="text-xs text-destructive">{errorsA.password.message}</p>}
                       </div>
                       <div className="grid grid-cols-2 gap-3">
@@ -262,11 +326,11 @@ export default function Register() {
                         <Label htmlFor="linkedin" className="text-white/90">LinkedIn ID (optional)</Label>
                         <Input id="linkedin" placeholder="linkedin-12345" {...regA('linkedinId')} className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus-visible:ring-white/30" />
                       </div>
-                      <Button className="w-full text-white border-0 bg-[#1e3a8a] hover:bg-[#1d4ed8]" disabled={submittingA} onClick={handleSubmitA(onAlumni)}>
+                      <Button className="w-full text-black border-0 bg-[#FFB800] hover:bg-[#FFA726]" disabled={submittingA} onClick={handleSubmitA(onAlumni)}>
                         {submittingA ? 'Registering...' : 'Register as Alumni'}
                       </Button>
                       <div className="text-base text-center text-white/90">
-                        Already have an account? <Link className="text-primary underline" to="/">Sign in</Link>
+                        Already have an account? <Link className="underline text-[#FFB800] hover:text-[#FFA726]" to="/">Sign in</Link>
                       </div>
                     </CardContent>
                   </Card>

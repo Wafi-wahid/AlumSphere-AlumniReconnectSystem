@@ -19,6 +19,96 @@ const baseUserSchema = z.object({
   role: z.enum(['student', 'alumni']).optional(),
 });
 
+// Google OAuth 2.0
+// GET /auth/google/start
+authRouter.get('/google/start', (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  const scope = encodeURIComponent('openid email profile');
+  const state = Math.random().toString(36).slice(2);
+  res.cookie('go_state', state, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  console.log('[google:start] building authorization url', { redirectUri, scope: 'openid email profile', state });
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(
+    redirectUri || ''
+  )}&scope=${scope}&state=${state}`;
+  return res.redirect(url);
+});
+
+// GET /auth/google/callback
+authRouter.get('/google/callback', async (req, res) => {
+  try {
+    const { code, state, error, error_description } = req.query as { code?: string; state?: string; error?: string; error_description?: string };
+    const appRedirect = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    console.log('[google:callback] query received', { hasCode: !!code, state, error, error_description });
+    if (error) {
+      res.cookie('go_state', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+      console.error('[google:callback] provider returned error', { error, error_description });
+      return res.redirect(`${appRedirect}/register?li_error=${encodeURIComponent(error_description || error)}`);
+    }
+    if (!code) {
+      console.error('[google:callback] missing code');
+      return res.redirect(`${appRedirect}/register?li_error=${encodeURIComponent('Missing authorization code')}`);
+    }
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI as string;
+    const stateCookie = (req as any).cookies?.go_state as string | undefined;
+    if (!state || !stateCookie || state !== stateCookie) {
+      res.cookie('go_state', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+      console.error('[google:callback] invalid state', { state, hasStateCookie: !!stateCookie });
+      return res.redirect(`${appRedirect}/register?li_error=${encodeURIComponent('Invalid OAuth state')}`);
+    }
+
+    // Exchange code for access token
+    console.log('[google:callback] exchanging code for token', { redirectUri });
+    const tokenRes = await axios.post(
+      'https://oauth2.googleapis.com/token',
+      new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: redirectUri,
+        client_id: process.env.GOOGLE_CLIENT_ID || '',
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+    console.log('[google:callback] token exchange ok', { status: tokenRes.status });
+    const accessToken = tokenRes.data.access_token as string;
+
+    // Fetch OIDC userinfo
+    console.log('[google:callback] fetching userinfo (OIDC)');
+    const userinfoRes = await axios.get('https://openidconnect.googleapis.com/v1/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    console.log('[google:callback] userinfo fetch ok', { status: userinfoRes.status });
+
+    const u = userinfoRes.data as any;
+    const email = (u.email as string | undefined)?.toLowerCase();
+    const name = (u.name as string) || `${u.given_name || ''} ${u.family_name || ''}`.trim();
+    const picture = (u.picture as string | undefined) || '';
+
+    // If email matches existing user, log them in
+    if (email) {
+      const existing = await User.findOne({ email });
+      if (existing) {
+        signAndSetCookie(res, { id: String(existing._id), role: existing.role });
+        res.cookie('go_state', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+        return res.redirect(appRedirect);
+      }
+    }
+
+    // Prefill registration data
+    const prefill = { name, email: email || '', profilePicture: picture, linkedinId: '' };
+    res.cookie('li_prefill', JSON.stringify(prefill), { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+    res.cookie('go_state', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+    return res.redirect(`${appRedirect}/register`);
+  } catch (e: any) {
+    const appRedirect = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    const details = e?.response?.data?.error_description || e?.response?.data || e?.message || 'Google auth failed';
+    console.error('[google:callback] exception', { details });
+    res.cookie('go_state', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+    return res.redirect(`${appRedirect}/register?li_error=${encodeURIComponent(String(details))}`);
+  }
+});
+
 const studentSchema = baseUserSchema.extend({
   role: z.literal('student'),
   sapId: z.string().regex(/^\d{5}$/, 'SAP ID must be exactly 5 digits'),
@@ -126,9 +216,39 @@ authRouter.get('/me', requireAuth, async (req, res) => {
 authRouter.get('/linkedin/start', requireAuth, (req, res) => {
   const clientId = process.env.LINKEDIN_CLIENT_ID;
   const redirectUri = process.env.LINKEDIN_REDIRECT_URI;
-  const scope = encodeURIComponent('r_liteprofile r_emailaddress');
+  const scope = encodeURIComponent('openid profile');
   const state = Math.random().toString(36).slice(2);
-  (req as any).sessionState = state;
+  res.cookie('li_state', state, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  console.log('[linkedin:start] building authorization url', { redirectUri, scope: 'openid profile', state });
+  const url = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(
+    redirectUri || ''
+  )}&scope=${scope}&state=${state}`;
+  return res.redirect(url);
+});
+
+// GET /auth/linkedin/login/start (direct login via LinkedIn)
+authRouter.get('/linkedin/login/start', (req, res) => {
+  const clientId = process.env.LINKEDIN_CLIENT_ID;
+  const redirectUri = process.env.LINKEDIN_REDIRECT_URI;
+  const scope = encodeURIComponent('openid profile email');
+  const state = Math.random().toString(36).slice(2);
+  res.cookie('li_state', state, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  res.cookie('li_mode', 'login', { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  console.log('[linkedin:login:start] building authorization url', { redirectUri, scope: 'openid profile email', state });
+  const url = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(
+    redirectUri || ''
+  )}&scope=${scope}&state=${state}`;
+  return res.redirect(url);
+});
+
+// GET /auth/linkedin/register/start
+authRouter.get('/linkedin/register/start', (req, res) => {
+  const clientId = process.env.LINKEDIN_CLIENT_ID;
+  const redirectUri = process.env.LINKEDIN_REDIRECT_URI;
+  const scope = encodeURIComponent('r_liteprofile');
+  const state = Math.random().toString(36).slice(2);
+  res.cookie('li_state', state, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+  console.log('[linkedin:register:start] building authorization url', { redirectUri, scope: 'openid profile', state });
   const url = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(
     redirectUri || ''
   )}&scope=${scope}&state=${state}`;
@@ -136,13 +256,30 @@ authRouter.get('/linkedin/start', requireAuth, (req, res) => {
 });
 
 // GET /auth/linkedin/callback
-authRouter.get('/linkedin/callback', requireAuth, async (req, res) => {
+authRouter.get('/linkedin/callback', async (req, res) => {
   try {
-    const { code } = req.query as { code?: string };
-    if (!code) return res.status(400).send('Missing code');
+    const { code, state, error, error_description } = req.query as { code?: string; state?: string; error?: string; error_description?: string };
+    const appRedirect = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    console.log('[linkedin:callback] query received', { hasCode: !!code, state, error, error_description });
+    if (error) {
+      res.cookie('li_state', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+      console.error('[linkedin:callback] provider returned error', { error, error_description });
+      return res.redirect(`${appRedirect}/register?li_error=${encodeURIComponent(error_description || error)}`);
+    }
+    if (!code) {
+      console.error('[linkedin:callback] missing code');
+      return res.redirect(`${appRedirect}/register?li_error=${encodeURIComponent('Missing authorization code')}`);
+    }
     const redirectUri = process.env.LINKEDIN_REDIRECT_URI as string;
+    const stateCookie = (req as any).cookies?.li_state as string | undefined;
+    if (!state || !stateCookie || state !== stateCookie) {
+      res.cookie('li_state', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+      console.error('[linkedin:callback] invalid state', { state, hasStateCookie: !!stateCookie });
+      return res.redirect(`${appRedirect}/register?li_error=${encodeURIComponent('Invalid OAuth state')}`);
+    }
 
     // Exchange code for access token
+    console.log('[linkedin:callback] exchanging code for token', { redirectUri });
     const tokenRes = await axios.post(
       'https://www.linkedin.com/oauth/v2/accessToken',
       new URLSearchParams({
@@ -154,41 +291,90 @@ authRouter.get('/linkedin/callback', requireAuth, async (req, res) => {
       }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );
+    console.log('[linkedin:callback] token exchange ok', { status: tokenRes.status });
     const accessToken = tokenRes.data.access_token as string;
 
-    // Fetch basic profile
-    const profileRes = await axios.get('https://api.linkedin.com/v2/me?projection=(id,localizedFirstName,localizedLastName,localizedHeadline,profilePicture(displayImage~:playableStreams))', {
+    // Fetch OpenID Connect userinfo (may include email if scope granted)
+    console.log('[linkedin:callback] fetching userinfo (OIDC)');
+    const userinfoRes = await axios.get('https://api.linkedin.com/v2/userinfo', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const emailRes = await axios.get(
-      'https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))',
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
+    console.log('[linkedin:callback] userinfo fetch ok', { status: userinfoRes.status });
 
-    const prof = profileRes.data;
-    const email = emailRes.data?.elements?.[0]?.['handle~']?.emailAddress as string | undefined;
-    const first = prof.localizedFirstName || '';
-    const last = prof.localizedLastName || '';
-    const headline = prof.localizedHeadline || '';
-    const picCandidates = prof?.profilePicture?.['displayImage~']?.elements || [];
-    const pic = picCandidates.length ? picCandidates[picCandidates.length - 1]?.identifiers?.[0]?.identifier : undefined;
+    const u = userinfoRes.data as any;
+    const email = (u.email as string | undefined) || undefined;
+    const first = u.given_name || '';
+    const last = u.family_name || '';
+    const headline = ''; // not provided by OIDC userinfo
+    const pic = u.picture || undefined;
 
-    const userId = (req as any).user.id as string;
-    await User.findByIdAndUpdate(userId, {
-      $set: {
-        name: `${first} ${last}`.trim() || undefined,
-        email: email || undefined,
-        profileHeadline: headline || undefined,
-        profilePicture: pic || undefined,
-        linkedinId: prof.id,
-      },
-    });
+    // If logged in, update user profile; if not, store prefill for registration
+    let userId: string | undefined;
+    try {
+      const token = (req as any).cookies?.token as string | undefined;
+      if (token) {
+        const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+        userId = decoded?.id;
+      }
+    } catch {}
 
-    // Redirect back to profile page in the app
-    const appRedirect = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
-    return res.redirect(`${appRedirect}/profile`);
+    if (userId) {
+      console.log('[linkedin:callback] updating logged-in user with linkedin profile', { userId });
+      await User.findByIdAndUpdate(userId, {
+        $set: {
+          name: `${first} ${last}`.trim() || undefined,
+          email: email || undefined,
+          profileHeadline: headline || undefined,
+          profilePicture: pic || undefined,
+          linkedinId: u.sub || undefined,
+        },
+      });
+      return res.redirect(`${appRedirect}/profile`);
+    } else {
+      // If login mode or existing user found, sign in directly
+      const liMode = (req as any).cookies?.li_mode as string | undefined;
+      let existing = null as any;
+      if (email) existing = await User.findOne({ email: email.toLowerCase() });
+      if (!existing && u.sub) existing = await User.findOne({ linkedinId: u.sub });
+      if (liMode === 'login' || existing) {
+        if (existing) {
+          signAndSetCookie(res, { id: String(existing._id), role: existing.role });
+          res.cookie('li_state', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+          res.cookie('li_mode', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+          return res.redirect(appRedirect);
+        }
+        // login mode but no existing user; fall through to prefill/register
+      }
+      console.log('[linkedin:callback] setting registration prefill cookie (OIDC)');
+      const prefill = {
+        name: (u.name as string) || `${first} ${last}`.trim() || '',
+        email: (email || '').toLowerCase(),
+        profilePicture: pic || '',
+        linkedinId: (u.sub as string) || '',
+      };
+      res.cookie('li_prefill', JSON.stringify(prefill), { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+      res.cookie('li_state', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+      res.cookie('li_mode', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+      return res.redirect(`${appRedirect}/register`);
+    }
   } catch (e: any) {
-    console.error('LinkedIn callback error', e?.response?.data || e?.message);
-    return res.status(500).send('LinkedIn sync failed');
+    const appRedirect = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    const details = e?.response?.data?.error_description || e?.response?.data || e?.message || 'LinkedIn sync failed';
+    console.error('[linkedin:callback] exception', { details });
+    res.cookie('li_state', '', { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) });
+    return res.redirect(`${appRedirect}/register?li_error=${encodeURIComponent(String(details))}`);
+  }
+});
+
+// GET /auth/linkedin/prefill
+authRouter.get('/linkedin/prefill', (req, res) => {
+  try {
+    const v = (req as any).cookies?.li_prefill as string | undefined;
+    if (!v) return res.json({ prefill: null });
+    let json: any = null;
+    try { json = JSON.parse(v); } catch { json = null; }
+    return res.json({ prefill: json });
+  } catch {
+    return res.json({ prefill: null });
   }
 });
