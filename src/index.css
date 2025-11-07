@@ -8,43 +8,55 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    /* Neutral dark for text/icons: #3E3E3E */
-    --foreground: 0 0% 24%;
+    /* Neutral Grays */
+    /* Off White #F8FAFC (main backgrounds) */
+    --background: 210 33% 98%;
+    /* Typography: Charcoal #2D3748 */
+    --foreground: 217 23% 23%;
 
-    --card: 0 0% 100%;
+    /* Card Backgrounds: Off White */
+    --card: 210 33% 98%;
     --card-foreground: 210 12% 16%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 210 12% 16%;
 
-    /* Primary: dark blue #0A2342 -> hsl(213,74%,15%) */
-    --primary: 213 74% 15%;
+    /* Primary Actions (Light): Royal Blue #4169E1 */
+    --primary: 225 72% 57%;
     --primary-foreground: 0 0% 100%;
-    --primary-light: 213 74% 25%;
-    --primary-dark: 213 74% 10%;
+    /* Hover States (Light): Sky Accent #4D94FF */
+    --primary-light: 220 100% 65%;
+    --primary-dark: 225 72% 46%;
 
-    /* Secondary (mustard) #F2A71B -> ~hsl(39,89%,53%) */
-    --brand-secondary: 39 89% 53%;
-    --brand-secondary-foreground: 0 0% 10%;
+    /* Deep Ocean #0A1F44 for headers/nav/heroes */
+    --brand-deep: 216 76% 15%;
 
-    /* Gold accent #FFC857 -> hsl(40,100%,67%) for hovers/micro-interactions */
-    --brand-accent: 40 100% 67%;
+    /* Secondary accent (Violet 300 #a78bfa) */
+    --brand-secondary: 258 93% 75%;
+    --brand-secondary-foreground: 255 20% 15%;
 
-    /* CTA Light Blue #66B2FF -> hsl(207,100%,70%) */
-    --brand-cta: 207 100% 70%;
-    --brand-cta-foreground: 0 0% 100%;
+    /* Highlights & Rewards (Light): Vibrant Gold #FFB800 */
+    --brand-accent: 44 100% 50%;
+    /* Amber Glow (Light) #FFA726 (secondary CTAs) */
+    --brand-amber: 36 100% 57%;
+    /* Soft Yellow #FFF4D6 (backgrounds, subtle highlights) */
+    --brand-soft-yellow: 42 100% 91%;
 
-    /* Keep neutral secondary for surfaces */
-    --secondary: 210 20% 96%;
-    --secondary-foreground: 210 12% 16%;
+    /* Cyan accent (#22d3ee) */
+    --brand-cta: 189 92% 56%;
+    --brand-cta-foreground: 210 40% 10%;
 
-    --muted: 210 20% 96%;
-    --muted-foreground: 210 10% 46%;
+    /* Surfaces */
+    --secondary: 220 20% 97%;
+    /* Secondary Typography: Slate Gray #64748B */
+    --secondary-foreground: 210 17% 46%;
 
-    /* Accent: light gray #D9D9D9 */
-    --accent: 0 0% 85%;
-    --accent-foreground: 0 0% 24%;
+    --muted: 220 22% 96%;
+    --muted-foreground: 210 17% 46%;
+
+    /* Accent surface */
+    --accent: 220 20% 94%;
+    --accent-foreground: 217 23% 23%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
@@ -55,16 +67,22 @@ All colors MUST be HSL.
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 210 20% 90%;
-    --input: 210 20% 90%;
-    --ring: 210 100% 35%;
+    /* Light Silver #E2E8F0 for borders/dividers */
+    --border: 210 27% 91%;
+    --input: 210 27% 91%;
+    --ring: 216 100% 50%;
 
     --radius: 0.5rem;
 
-    /* Custom design tokens */
-    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    /* Premium gradients */
+    --gradient-hero: linear-gradient(135deg, #0A1F44 0%, #0066FF 100%);
+    --gradient-accent: linear-gradient(135deg, #0066FF 0%, #4D94FF 100%);
+    --gradient-warm: linear-gradient(135deg, #FFA726 0%, #FFB800 100%);
+    --gradient-soft: linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%);
+    /* Legacy gradient tokens retained */
+    --gradient-primary: var(--gradient-accent);
     --gradient-secondary: linear-gradient(135deg, hsl(var(--brand-secondary)), hsl(var(--brand-accent)));
-    --gradient-duo: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-cta)));
+    --gradient-duo: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-secondary)) 50%, hsl(var(--brand-cta)));
     --gradient-subtle: linear-gradient(180deg, hsl(var(--background)), hsl(var(--secondary)));
     --shadow-soft: 0 2px 8px -2px hsl(var(--primary) / 0.1);
     --shadow-medium: 0 6px 20px -6px hsl(var(--primary) / 0.18);
@@ -89,33 +107,41 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    /* Dark mode base: Midnight Navy */
+    --background: 225 66% 13%;
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
+    --card: 225 50% 12%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222.2 84% 4.9%;
+    --popover: 225 50% 12%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 220 70% 50%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    /* Primary (Dark): Electric Blue */
+    --primary: 216 100% 50%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 225 36% 16%;
+    --secondary-foreground: 210 40% 96%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 225 28% 18%;
+    --muted-foreground: 215 16% 72%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 225 28% 18%;
+    --accent-foreground: 210 40% 96%;
 
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 72% 40%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 225 22% 22%;
+    --input: 225 22% 22%;
+    --ring: 216 100% 50%;
+    /* Bright Sky hover */
+    --primary-light: 210 100% 70%;
+    /* Golden Spark for highlights */
+    --brand-accent: 45 100% 51%;
+    /* Sunset Orange for secondary CTAs */
+    --brand-amber: 14 100% 63%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -134,6 +160,9 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground antialiased;
+    /* Subtle non-white background (light gray-blue) */
+    background-color: #f5f7fb;
+    background-image: none;
   }
 
   /* Better focus visible */
