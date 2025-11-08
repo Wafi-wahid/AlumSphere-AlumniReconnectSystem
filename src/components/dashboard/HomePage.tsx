@@ -1,7 +1,7 @@
  
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "@/lib/firebase";
-import { collection, collectionGroup, deleteDoc, doc, getDoc, onSnapshot, setDoc, updateDoc, query, where, limit } from "firebase/firestore";
+import { collection, collectionGroup, deleteDoc, doc, getDoc, onSnapshot, setDoc, updateDoc, query, where, limit, arrayUnion } from "firebase/firestore";
 import { Users, Calendar, Briefcase, Heart, Star, Eye, ThumbsUp, Target, BarChart3, Sparkles, Flame, Trophy, Bolt, BadgeCheck, FileText, LogIn, Send, MessageSquare, Rocket, Megaphone, Mic2, Link as LinkIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,19 +33,27 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     { id: 'skill', title: 'Learn new skill', done: false },
     { id: 'product', title: 'Create product', done: false },
   ]);
-  const [analytics, setAnalytics] = useState<{ profileViews7d: number; mentorshipRequested: number; mentorshipAccepted: number; postLikes7d: number; likesDaily7d: number[] }>({
+  const [analytics, setAnalytics] = useState<{ profileViews7d: number; mentorshipRequested: number; mentorshipAccepted: number; postLikes7d: number; likesDaily7d: number[]; connections7d?: number; connectionsDaily7d?: number[]; applied7d?: number; appliedDaily7d?: number[]; events7d?: number; eventsDaily7d?: number[] }>({
     profileViews7d: 0,
     mentorshipRequested: 0,
     mentorshipAccepted: 0,
     postLikes7d: 0,
     likesDaily7d: [],
+    connections7d: 0,
+    connectionsDaily7d: [],
+    applied7d: 0,
+    appliedDaily7d: [],
+    events7d: 0,
+    eventsDaily7d: [],
   });
   const [streakDays] = useState<number>(3);
   const [level] = useState<number>(1);
-  const [missions, setMissions] = useState<Array<{ id: 'connect'|'apply'|'request'|'host'; title: string; progress: number }>>([
-    { id: 'connect', title: "Connect with alumni's", progress: 0 },
+  const [missions, setMissions] = useState<Array<{ id: 'connect'|'apply'|'request'|'host'|'community'|'event'; title: string; progress: number }>>([
+    { id: 'connect', title: 'Connect with alumni', progress: 0 },
     { id: 'apply', title: 'Apply to job', progress: 0 },
     { id: 'request', title: 'Request mentorship', progress: 0 },
+    { id: 'community', title: 'Engage in community', progress: 0 },
+    { id: 'event', title: 'Register for event', progress: 0 },
   ]);
   const [points, setPoints] = useState<number>(0);
   const [connectCount, setConnectCount] = useState<number>(0);
@@ -57,6 +65,39 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   const [hasPost, setHasPost] = useState<boolean>(false);
   const [hasLiked, setHasLiked] = useState<boolean>(false);
   const [showProfilePrompt, setShowProfilePrompt] = useState(false);
+  const [showAllMissions, setShowAllMissions] = useState(false);
+  // Rising-edge trackers
+  const prevConnectRef = useRef<number>(0);
+  const prevApplyRef = useRef<number>(0);
+  const prevMentorRef = useRef<number>(0);
+  const prevHasPostRef = useRef<boolean>(false);
+  const prevHasLikeRef = useRef<boolean>(false);
+  const summaryHydratedRef = useRef<boolean>(false);
+  const postsHydratedRef = useRef<boolean>(false);
+  // Layout: lock Today's Mission height to match right column stack
+  const rightColRef = useRef<HTMLDivElement | null>(null);
+  const [rightColHeight, setRightColHeight] = useState<number>(0);
+  useEffect(() => {
+    const el = rightColRef.current;
+    if (!el) return;
+    const measure = () => {
+      try { setRightColHeight(el.getBoundingClientRect().height); } catch {}
+    };
+    measure();
+    let ro: ResizeObserver | null = null;
+    try {
+      ro = new ResizeObserver(() => measure());
+      ro.observe(el);
+    } catch {}
+    const onWin = () => measure();
+    window.addEventListener('resize', onWin);
+    const id = window.setInterval(measure, 800); // fallback in case of dynamic content
+    return () => {
+      if (ro) try { ro.disconnect(); } catch {}
+      window.removeEventListener('resize', onWin);
+      window.clearInterval(id);
+    };
+  }, [user?.role]);
 
   const getNewBadges = (kind: 'connect'|'apply'|'request'|'host', count: number, current: string[]) => {
     const newOnes: string[] = [];
@@ -81,6 +122,19 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     return newOnes;
   };
 
+  // Realtime task progress from live signals
+  const taskProgress = (id: 'connect'|'apply'|'request'|'host'|'community'|'event') => {
+    switch (id) {
+      case 'connect': return connectCount > 0 ? 100 : 0;
+      case 'apply': return applyCount > 0 ? 100 : 0;
+      case 'request': return mentorshipCount > 0 ? 100 : 0;
+      case 'community': return (hasPost || hasLiked) ? 100 : 0;
+      case 'event': return 0; // TODO: set to 100 when RSVP implemented
+      case 'host': return 0;
+      default: return 0;
+    }
+  };
+
   const persistGamification = async (payload?: Partial<{ points: number; connectCount: number; applyCount: number; mentorshipCount: number; earnedBadges: string[] }>) => {
     if (!user?.id) return;
     const body = {
@@ -94,35 +148,20 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     await setDoc(doc(db, 'users', user.id, 'gamification', 'summary'), body, { merge: true });
   };
 
-  const persistMissions = async (nextMissions: Array<{ id: 'connect'|'apply'|'request'|'host'; title: string; progress: number }>) => {
+  const persistMissions = async (nextMissions: Array<{ id: 'connect'|'apply'|'request'|'host'|'community'|'event'; title: string; progress: number }>) => {
     if (!user?.id) return;
     const today = new Date();
     const key = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
     await setDoc(doc(db, 'users', user.id, 'missions', 'today'), { dateKey: key, missions: nextMissions }, { merge: true });
   };
 
-  const handleMissionAction = async (id: 'connect'|'apply'|'request'|'host') => {
-    const nextPoints = points + 10;
-    const nextMissions = missions.map((m) => m.id === id ? { ...m, progress: Math.min(100, m.progress + 50) } : m);
-    let nConnect = connectCount, nApply = applyCount, nReq = mentorshipCount;
-    if (id === 'connect') nConnect += 1;
-    if (id === 'apply') nApply += 1;
-    if (id === 'request') nReq += 1;
-    const newBadges = getNewBadges(id, id === 'connect' ? nConnect : id === 'apply' ? nApply : nReq, earnedBadges);
-    const allBadges = newBadges.length ? [...earnedBadges, ...newBadges] : earnedBadges;
-    if (newBadges.length) toast.success(`Badge unlocked: ${newBadges.join(', ')}`);
-    setPoints(nextPoints);
-    setMissions(nextMissions);
-    setConnectCount(nConnect);
-    setApplyCount(nApply);
-    setMentorshipCount(nReq);
-    setEarnedBadges(allBadges);
-    await persistGamification({ points: nextPoints, connectCount: nConnect, applyCount: nApply, mentorshipCount: nReq, earnedBadges: allBadges });
-    await persistMissions(nextMissions);
+  const handleMissionAction = async (id: 'connect'|'apply'|'request'|'host'|'community'|'event') => {
+    // Only navigate. Points and badges are awarded by the actual feature flows (backend/listeners)
     if (id === 'connect') onNavigate('directory');
     if (id === 'apply') onNavigate('careers');
     if (id === 'request') onNavigate('mentorship');
-    if (id === 'host') onNavigate('events');
+    if (id === 'host' || id === 'event') onNavigate('events');
+    if (id === 'community') onNavigate('community');
   };
 
   useEffect(() => {
@@ -163,18 +202,83 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
         setEarnedBadges(normalized);
         setBadgesLoaded(true);
       }
+      // Hydrate rising-edge baselines on first snapshot to avoid awarding on reload
+      if (!summaryHydratedRef.current) {
+        prevConnectRef.current = Number(d?.connectCount || 0);
+        prevApplyRef.current = Number(d?.applyCount || 0);
+        prevMentorRef.current = Number(d?.mentorshipCount || 0);
+        summaryHydratedRef.current = true;
+      }
     });
     return () => unsub();
   }, [user?.id]);
+
+  // Award +10 points on real increases (connections/applications/mentorship)
+  useEffect(() => {
+    if (!user?.id || !badgesLoaded || !summaryHydratedRef.current) return;
+    const updates: Array<Promise<any>> = [];
+    const sumRef = doc(db, 'users', user.id, 'gamification', 'summary');
+    // Connection accepted: on increase
+    if (connectCount > (prevConnectRef.current || 0)) {
+      updates.push(setDoc(sumRef, { points: (points || 0) + 10 }, { merge: true }));
+      prevConnectRef.current = connectCount;
+    } else if (connectCount !== (prevConnectRef.current || 0)) {
+      prevConnectRef.current = connectCount;
+    }
+    // Applications
+    if (applyCount > (prevApplyRef.current || 0)) {
+      updates.push(setDoc(sumRef, { points: (points || 0) + 10 }, { merge: true }));
+      prevApplyRef.current = applyCount;
+    } else if (applyCount !== (prevApplyRef.current || 0)) {
+      prevApplyRef.current = applyCount;
+    }
+    // Mentorship
+    if (mentorshipCount > (prevMentorRef.current || 0)) {
+      updates.push(setDoc(sumRef, { points: (points || 0) + 10 }, { merge: true }));
+      prevMentorRef.current = mentorshipCount;
+    } else if (mentorshipCount !== (prevMentorRef.current || 0)) {
+      prevMentorRef.current = mentorshipCount;
+    }
+    if (updates.length) { Promise.allSettled(updates); }
+  }, [user?.id, badgesLoaded, connectCount, applyCount, mentorshipCount]);
+
+  // Award +10 points on first post/first like (rising edge) and ensure badge present
+  useEffect(() => {
+    if (!user?.id || !badgesLoaded) return;
+    const sumRef = doc(db, 'users', user.id, 'gamification', 'summary');
+    const toRun: Array<Promise<any>> = [];
+    if (postsHydratedRef.current && hasPost && !prevHasPostRef.current) {
+      toRun.push(setDoc(sumRef, { points: (points || 0) + 10, earnedBadges: arrayUnion('First Post') }, { merge: true }));
+    }
+    if (postsHydratedRef.current && hasLiked && !prevHasLikeRef.current) {
+      toRun.push(setDoc(sumRef, { points: (points || 0) + 10, earnedBadges: arrayUnion('First Like') }, { merge: true }));
+    }
+    prevHasPostRef.current = hasPost;
+    prevHasLikeRef.current = hasLiked;
+    if (toRun.length) { Promise.allSettled(toRun); }
+  }, [user?.id, badgesLoaded, hasPost, hasLiked]);
 
   // Core badge sources: First Post and First Like
   useEffect(() => {
     if (!user?.id) return;
     if (!badgesLoaded) return; // wait until server badges have loaded to avoid clobbering
     const q1 = query(collection(db, 'posts'), where('authorId', '==', user.id), limit(1));
-    const unsub1 = onSnapshot(q1, (snap) => setHasPost(!snap.empty));
+    const unsub1 = onSnapshot(q1, (snap) => {
+      const v = !snap.empty;
+      setHasPost(v);
+      if (!postsHydratedRef.current) {
+        prevHasPostRef.current = v;
+      }
+    });
     const q2 = query(collection(db, 'posts'), where('likes', 'array-contains', user.id), limit(1));
-    const unsub2 = onSnapshot(q2, (snap) => setHasLiked(!snap.empty));
+    const unsub2 = onSnapshot(q2, (snap) => {
+      const v = !snap.empty;
+      setHasLiked(v);
+      if (!postsHydratedRef.current) {
+        prevHasLikeRef.current = v;
+        postsHydratedRef.current = true;
+      }
+    });
     return () => { unsub1(); unsub2(); };
   }, [user?.id, badgesLoaded]);
 
@@ -314,9 +418,15 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
           mentorshipAccepted: Number(d.mentorshipAccepted || 0),
           postLikes7d: Number(d.postLikes7d || 0),
           likesDaily7d: Array.isArray(d.likesDaily7d) ? d.likesDaily7d.map((n: any) => Number(n||0)) : [],
+          connections7d: Number(d.connections7d || 0),
+          connectionsDaily7d: Array.isArray(d.connectionsDaily7d) ? d.connectionsDaily7d.map((n: any) => Number(n||0)) : [],
+          applied7d: Number(d.applied7d || 0),
+          appliedDaily7d: Array.isArray(d.appliedDaily7d) ? d.appliedDaily7d.map((n: any) => Number(n||0)) : [],
+          events7d: Number(d.events7d || 0),
+          eventsDaily7d: Array.isArray(d.eventsDaily7d) ? d.eventsDaily7d.map((n: any) => Number(n||0)) : [],
         });
       } else {
-        setAnalytics({ profileViews7d: 0, mentorshipRequested: 0, mentorshipAccepted: 0, postLikes7d: 0, likesDaily7d: [] });
+        setAnalytics({ profileViews7d: 0, mentorshipRequested: 0, mentorshipAccepted: 0, postLikes7d: 0, likesDaily7d: [], connections7d: 0, connectionsDaily7d: [], applied7d: 0, appliedDaily7d: [], events7d: 0, eventsDaily7d: [] });
       }
     });
     return () => unsub();
@@ -394,6 +504,87 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     const area = `${path} L ${p + (n - 1) * stepX} ${h - p} L ${p} ${h - p} Z`;
     return { w, h, p, maxV, pts, path, area };
   }, [likesData]);
+  // Build weekday buckets in Mon-Sun order for horizontal bar chart
+  const weekOrder = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const weekColors: Record<string, string> = {
+    Mon: '#f59e0b', // amber-500
+    Tue: '#3b82f6', // blue-500
+    Wed: '#10b981', // emerald-500
+    Thu: '#ef4444', // red-500
+    Fri: '#8b5cf6', // violet-500
+    Sat: '#ec4899', // pink-500
+    Sun: '#06b6d4', // cyan-500
+  };
+  // Per-metric solid color palette (applied to bars)
+  const metricColors: Record<Metric, string> = {
+    likes: '#3b82f6', // blue
+    connections: '#8b5cf6', // violet
+    applied: '#f59e0b', // amber
+    events: '#10b981', // emerald
+  };
+  // Last 7 days weekday labels (Mon..Sun order when bucketed by label)
+  const weekdayLabels7 = useMemo(() => {
+    const labels: string[] = [];
+    const today = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(today.getDate() - (6 - i));
+      labels.push(d.toLocaleDateString(undefined, { weekday: 'short' }));
+    }
+    return labels;
+  }, []);
+  // Chart animation + hover tooltip
+  const [chartAnim, setChartAnim] = useState(false);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  useEffect(() => {
+    const t = window.setTimeout(() => setChartAnim(true), 50);
+    return () => window.clearTimeout(t);
+  }, []);
+  // Analytics metric selector
+  type Metric = 'likes' | 'connections' | 'applied' | 'events';
+  const [metric, setMetric] = useState<Metric>('likes');
+  const METRIC_OPTIONS: Array<{ key: Metric; label: string }> = [
+    { key: 'likes', label: 'Post Likes' },
+    { key: 'connections', label: 'Connections' },
+    { key: 'applied', label: 'Jobs Applied' },
+    { key: 'events', label: 'Events Attended' },
+  ];
+  const metricLabel = METRIC_OPTIONS.reduce((acc, m) => { acc[m.key] = m.label; return acc; }, {} as Record<Metric, string>);
+  const selectedTotal = useMemo(() => {
+    switch (metric) {
+      case 'likes': return analytics.postLikes7d || 0;
+      case 'connections': return Number(analytics.connections7d || 0);
+      case 'applied': return Number(analytics.applied7d || 0);
+      case 'events': return Number(analytics.events7d || 0);
+      default: return 0;
+    }
+  }, [metric, analytics.postLikes7d, analytics.connections7d, analytics.applied7d, analytics.events7d]);
+  // Selected metric 7-day series in Mon..Sun order for charting
+  const selectedSeries = useMemo(() => {
+    const map: Record<string, number> = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
+    if (metric === 'likes') {
+      likeLabels.forEach((lbl, i) => {
+        const key = (lbl || '').slice(0, 3);
+        if (key in map) map[key] += Number(likesData[i] || 0);
+      });
+    } else {
+      const src = metric === 'connections' ? (analytics.connectionsDaily7d || [])
+        : metric === 'applied' ? (analytics.appliedDaily7d || [])
+        : metric === 'events' ? (analytics.eventsDaily7d || [])
+        : [];
+      const base = src.slice(-7);
+      while (base.length < 7) base.unshift(0);
+      weekdayLabels7.forEach((lbl, i) => {
+        const key = (lbl || '').slice(0, 3);
+        if (key in map) map[key] += Number(base[i] || 0);
+      });
+    }
+    return weekOrder.map((d) => map[d as keyof typeof map] || 0);
+  }, [metric, likeLabels, likesData, analytics.connectionsDaily7d, analytics.appliedDaily7d, analytics.eventsDaily7d, weekdayLabels7]);
+
+  const weekdayBars = useMemo(() => {
+    return weekOrder.map((d, idx) => ({ day: d, value: selectedSeries[idx] || 0 }));
+  }, [selectedSeries]);
   return (
     <div className="space-y-6">
 
@@ -482,65 +673,77 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong min-h-[260px]">
-          <CardHeader>
+        <Card className="lg:col-span-2 rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong min-h-[260px] flex flex-col overflow-hidden" style={{ height: rightColHeight ? rightColHeight : undefined }}>
+          <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2"><Bolt className="h-5 w-5" /> Today's Mission</CardTitle>
-            <CardDescription>Complete tasks to level up</CardDescription>
+            <CardDescription>Complete tasks to get badges</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 p-5">
-            <div className="flex items-center justify-between text-sm mb-1">
-              <div className="text-muted-foreground">Points</div>
-              <div className="font-semibold">{points}</div>
+          <CardContent className="space-y-2 p-5 pt-0 flex-1 min-h-0 flex flex-col">
+            <div className="flex items-center justify-between">
+              <div className="text-sm md:text-base text-muted-foreground">
+                Total Points: <span className="text-foreground font-semibold text-base md:text-lg">{points}</span>
+              </div>
             </div>
-            <div className="space-y-3 max-h-60 overflow-auto pr-1">
-              {missions.map(m => (
+            <div className={`space-y-3 flex-1 min-h-0 overflow-auto pr-1`}>
+              {(showAllMissions ? missions : missions.slice(0,3)).map((m, idx) => (
                 <div key={m.id} className="p-3 rounded-xl border flex items-center justify-between gap-3 hover:bg-accent/50 transition-colors">
-                  <div className="text-sm font-medium">
+                  <div className="text-sm font-medium truncate flex items-center gap-2">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[11px]">{(showAllMissions ? missions : missions.slice(0,3)).findIndex(x=>x.id===m.id) + 1}</span>
                     {user?.role === 'alumni'
                       ? (m.id === 'apply' ? 'Post a job'
                         : m.id === 'connect' ? 'Connect with students'
                         : m.id === 'request' ? 'Mentor students'
                         : m.id === 'host' ? 'Host events'
+                        : m.id === 'community' ? 'Engage in community'
+                        : m.id === 'event' ? 'Register for event'
                         : m.title)
-                      : m.title}
+                      : (m.id === 'connect' ? 'Connect with alumni'
+                        : m.id === 'apply' ? 'Apply to job'
+                        : m.id === 'request' ? 'Request mentorship'
+                        : m.id === 'community' ? 'Engage in community'
+                        : m.id === 'event' ? 'Register for event'
+                        : m.title)}
                   </div>
                   <div className="flex-1 max-w-[280px]">
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary transition-all duration-700" style={{ width: `${m.progress}%` }} />
+                      <div className="h-full bg-primary transition-all duration-700" style={{ width: `${taskProgress(m.id)}%` }} />
                     </div>
                   </div>
                   <Button size="sm" className="bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]" onClick={() => handleMissionAction(m.id)}>
                     {m.id === 'apply' ? (user?.role === 'alumni' ? 'Post' : 'Apply')
                       : m.id === 'request' ? (user?.role === 'alumni' ? 'Mentor' : 'Request')
-                      : m.id === 'host' ? 'Host'
-                      : 'Connect'}
+                      : (m.id === 'host' ? 'Host' : m.id === 'community' ? 'Open' : m.id === 'event' ? 'RSVP' : 'Connect')}
                   </Button>
                 </div>
               ))}
+              {!showAllMissions && missions.length > 3 && (
+                <div className="flex justify-center">
+                  <Button size="sm" variant="outline" onClick={() => setShowAllMissions(true)}>Load more</Button>
+                </div>
+              )}
             </div>
-            <Button className="w-full bg-[#1e3a8a] text-white hover:bg-[#60a5fa]">Start Mission</Button>
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
-            <CardContent className="p-5">
+        <div className="space-y-6" ref={rightColRef}>
+          <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong h-24 md:h-20">
+            <CardContent className="px-4 py-3 h-full flex items-center">
               {user?.role === 'alumni' ? (
-                <div className="flex items-start gap-3">
+                <div className="flex items-center gap-3 w-full">
                   <Trophy className="h-6 w-6 text-yellow-500" />
-                  <div className="space-y-1">
+                  <div className="space-y-0.5 flex-1 min-w-0">
                     <div className="text-sm font-semibold">Share your story on Wall of Fame</div>
                     <div className="text-xs text-muted-foreground">Inspire students with your journey and tips.</div>
-                    <Button size="sm" className="mt-2" onClick={() => onNavigate('wallOfFame')}>Share your story</Button>
                   </div>
+                  <Button size="sm" className="shrink-0" onClick={() => onNavigate('wallOfFame')}>Share</Button>
                 </div>
               ) : (
-                <div className="flex items-start gap-3">
+                <div className="flex items-center gap-3 w-full">
                   <Trophy className="h-6 w-6 text-yellow-500" />
-                  <div className="space-y-1">
-                    <div className="text-sm font-semibold">Ali got an internship through Echo Alum Link 🎉</div>
-                    <div className="text-xs text-muted-foreground">Get guidance from mentors and land your first role.</div>
+                  <div className="space-y-0.5 flex-1 min-w-0">
+                    <div className="text-sm font-semibold">Ali got an internship through AlumSpere 🎉</div>
                   </div>
+                  <Button size="sm" className="shrink-0" onClick={() => onNavigate('wallOfFame')}>Read story</Button>
                 </div>
               )}
             </CardContent>
@@ -579,11 +782,11 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
             </Card>
           ) : (
             <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border bg-background">
-              <CardHeader>
+              <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Featured Mentors</CardTitle>
                 <CardDescription>Top mentor</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3 p-5">
+              <CardContent className="space-y-2 p-5 pt-3">
                 {featuredMentors.slice(0,3).map(m => (
                   <div key={m.id} className="flex items-center justify-between p-2 rounded-lg border hover:bg-muted/50">
                     <div className="flex items-center gap-3">
@@ -599,10 +802,22 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                         <div className="text-xs text-muted-foreground">{m.role}</div>
                       </div>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => onNavigate('mentorship')}>Request</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:hover:bg-yellow-900/10"
+                      onClick={() => onNavigate('mentorship')}
+                    >
+                      Request
+                    </Button>
                   </div>
                 ))}
-                <Button className="w-full mt-1" variant="outline" onClick={() => onNavigate('mentorship')}>See more</Button>
+                <Button
+                  className="w-full mt-1 text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
+                  onClick={() => onNavigate('mentorship')}
+                >
+                  See more
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -616,52 +831,120 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
         <Card className="lg:col-span-2 rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5" /> Your Activity Analytics</CardTitle>
-            <CardDescription>See your posts analytics</CardDescription>
+            <CardDescription>See your activity analytics</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 p-5">
-            {likesData.length === 0 ? (
+            {(selectedSeries.length === 0 || selectedSeries.every(v => (v || 0) === 0)) ? (
               <div className="group p-4 rounded-xl border bg-muted/30 text-sm transition-colors hover:bg-accent/30">
-                <div className="flex items-center justify-between">
-                  <span>No data to show</span>
-                  <span className="text-xs text-muted-foreground">Hover for tips</span>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Metric:</span>
+                    <select
+                      className="h-8 rounded-md border px-2 text-xs bg-background border-yellow-500 text-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                      value={metric}
+                      onChange={(e) => setMetric(e.target.value as any)}
+                    >
+                      {METRIC_OPTIONS.map(opt => (
+                        <option key={opt.key} value={opt.key}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="text-xs text-muted-foreground">Total: {selectedTotal}</div>
                 </div>
-                <div className="mt-2 text-muted-foreground">Post Likes (last 7 days)</div>
+                <div className="mt-2 text-muted-foreground">{metricLabel[metric]} (last 7 days)</div>
                 <div className="mt-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-                  <div>No likes in the last 7 days yet. Share something with your network to get the conversation going.</div>
+                  <div>No data to show for {metricLabel[metric]} yet. Complete related actions to see trends.</div>
                   <div className="mt-3 flex gap-2">
-                    <Button size="sm" onClick={() => onNavigate('community')}>Create Post</Button>
-                    <Button size="sm" variant="outline" onClick={() => onNavigate('community')}>Browse Feed</Button>
+                    {metric === 'likes' && (<><Button size="sm" onClick={() => onNavigate('community')}>Create Post</Button><Button size="sm" variant="outline" onClick={() => onNavigate('community')}>Browse Feed</Button></>)}
+                    {metric === 'connections' && (<><Button size="sm" onClick={() => onNavigate('directory')}>Find Alumni</Button></>)}
+                    {metric === 'applied' && (<><Button size="sm" onClick={() => onNavigate('careers')}>Explore Jobs</Button></>)}
+                    {metric === 'events' && (<><Button size="sm" onClick={() => onNavigate('events')}>Browse Events</Button></>)}
                   </div>
                 </div>
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Post Likes (last 7 days)</span>
-                  <span className="text-muted-foreground">Total: {analytics.postLikes7d}</span>
+                <div className="flex items-center justify-between text-sm gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Metric:</span>
+                    <select
+                      className="h-8 rounded-md border px-2 text-xs bg-background"
+                      value={metric}
+                      onChange={(e) => setMetric(e.target.value as any)}
+                    >
+                      <option value="likes">Post Likes</option>
+                      <option value="connections">Connections</option>
+                      <option value="applied">Jobs Applied</option>
+                      <option value="events">Events Attended</option>
+                    </select>
+                  </div>
+                  <span className="text-muted-foreground">Total: {selectedTotal}</span>
                 </div>
                 <div className="relative w-full">
-                  <svg viewBox={`0 0 ${likesChart.w} ${likesChart.h}`} className="w-full h-48">
-                    <defs>
-                      <linearGradient id="likesGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="rgb(30,58,138)" stopOpacity="0.35" />
-                        <stop offset="100%" stopColor="rgb(96,165,250)" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                    <path d={likesChart.area} fill="url(#likesGrad)" />
-                    <path d={likesChart.path} fill="none" stroke="rgb(30,58,138)" strokeWidth="2" />
-                    {likesChart.pts.map(([x,y], i) => (
-                      <circle key={i} cx={x} cy={y} r="3" fill="rgb(30,58,138)" />
-                    ))}
-                    {likesChart.pts.map(([x], i) => (
-                      <text key={`t-${i}`} x={x} y={likesChart.h - likesChart.p + 14} textAnchor="middle" fontSize="10" fill="#6b7280">
-                        {likeLabels[i]}
-                      </text>
-                    ))}
-                    <text x={likesChart.w - likesChart.p} y={likesChart.p - 6} textAnchor="end" fontSize="10" fill="#6b7280">
-                      Peak {Math.max(1, ...likesData)}
-                    </text>
-                  </svg>
+                  {(() => {
+                    const w = 700; const h = 260; const p = 36; // bottom padding for x labels
+                    const leftPad = 36; // left padding for y ticks
+                    const barGap = 10; const barW = (w - leftPad - 12 - barGap * (weekdayBars.length - 1)) / weekdayBars.length;
+                    const ticks = [0,5,10,15,20];
+                    const maxData = Math.max(1, ...weekdayBars.map(b => b.value));
+                    const maxV = Math.max(20, Math.ceil(maxData / 5) * 5);
+                    const toY = (v: number) => (h - p) - (v / maxV) * (h - p - 12);
+                    return (
+                      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-56">
+                        {/* Y-axis grid and ticks */}
+                        {ticks.map((val) => {
+                          const y = toY(val);
+                          return (
+                            <g key={val}>
+                              <line x1={leftPad} x2={w - 12} y1={y} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+                              <text x={leftPad - 6} y={y + 3} textAnchor="end" fontSize="10" fill="#6b7280">
+                                {val}
+                              </text>
+                            </g>
+                          );
+                        })}
+                        {/* Bars and X labels with animation and tooltip */}
+                        {weekdayBars.map((b, i) => {
+                          const x = leftPad + i * (barW + barGap);
+                          const yTop = toY(b.value);
+                          const fullH = (h - p) - yTop;
+                          const animH = chartAnim ? fullH : 0;
+                          const animY = chartAnim ? yTop : (h - p);
+                          const isHover = hoverIdx === i;
+                          return (
+                            <g key={b.day} onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)}>
+                              <rect
+                                x={x}
+                                y={animY}
+                                width={barW}
+                                height={Math.max(0, animH)}
+                                rx={6}
+                                fill={metricColors[metric]}
+                                opacity={isHover ? 1 : 0.9}
+                                stroke={isHover ? '#111827' : 'none'}
+                                strokeWidth={isHover ? 1 : 0}
+                              >
+                                <animate attributeName="y" from={h - p} to={yTop} dur="400ms" fill="freeze" begin={chartAnim ? `${i * 50}ms` : 'indefinite'} />
+                                <animate attributeName="height" from={0} to={Math.max(0, fullH)} dur="400ms" fill="freeze" begin={chartAnim ? `${i * 50}ms` : 'indefinite'} />
+                              </rect>
+                              <text x={x + barW / 2} y={h - p + 14} textAnchor="middle" fontSize="11" fill="#374151">
+                                {b.day}
+                              </text>
+                              <text x={x + barW / 2} y={yTop - 4} textAnchor="middle" fontSize="10" fill="#6b7280">
+                                {b.value}
+                              </text>
+                              {isHover && (
+                                <g>
+                                  <rect x={x + barW / 2 - 22} y={yTop - 28} rx={4} width={44} height={18} fill="#111827" opacity={0.9} />
+                                  <text x={x + barW / 2} y={yTop - 16} textAnchor="middle" fontSize="10" fill="#ffffff">{b.value}</text>
+                                </g>
+                              )}
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -766,13 +1049,15 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                     </span>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  className="transition-transform hover:scale-[1.03] text-[#0b1b3a] bg-yellow-500 hover:bg-yellow-400 border-0"
-                  onClick={() => toast.success(`Spot reserved for ${event.title}`)}
-                >
-                  RSVP
-                </Button>
+                <div className="w-32 flex justify-end">
+                  <Button
+                    size="sm"
+                    className="transition-transform hover:scale-[1.03] text-[#0b1b3a] bg-yellow-500 hover:bg-yellow-400 border-0"
+                    onClick={() => toast.success(`Spot reserved for ${event.title}`)}
+                  >
+                    RSVP
+                  </Button>
+                </div>
               </div>
             ))}
             <Button
@@ -810,11 +1095,8 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                       Posted by {job.postedBy}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {job.applicants} applicants
-                  </p>
                 </div>
-                <div className="space-y-2">
+                <div className="w-32 flex justify-end gap-2">
                   {user?.role === 'alumni' ? (
                     <Button
                       size="sm"
