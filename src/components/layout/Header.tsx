@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAuth } from "@/store/auth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { collection, onSnapshot, query, where, updateDoc, setDoc, doc, arrayUnion } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
@@ -49,6 +49,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
       Notification.requestPermission().catch(() => {});
     }
     if (!user?.id) return;
+    if (auth.currentUser?.isAnonymous) return; // skip when anonymous due to rules
     const q = query(collection(db, "conversations"), where("participants", "array-contains", user.id));
     const unsub = onSnapshot(q, (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
@@ -94,6 +95,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
   const [pendingReqCount, setPendingReqCount] = useState(0);
   useEffect(() => {
     if (!user?.id) return;
+    if (auth.currentUser?.isAnonymous) return; // skip when anonymous due to rules
     const unsubReq = onSnapshot(collection(db, 'connections', user.id, 'requests'), (snap) => {
       const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
       setPendingReqCount(items.length || 0);
@@ -195,6 +197,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
   // Load persisted header-dismissed conversations from profile
   useEffect(() => {
     if (!user?.id) return;
+    if (auth.currentUser?.isAnonymous) return; // skip when anonymous due to rules
     const prefRef = doc(db, 'profiles', user.id);
     const unsub = onSnapshot(prefRef, (snap) => {
       const data = (snap.data() as any) || {};

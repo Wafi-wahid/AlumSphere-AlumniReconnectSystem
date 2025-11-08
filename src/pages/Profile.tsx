@@ -14,8 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Lightbulb, ShieldCheck, UserPlus, Linkedin, Upload, Sparkles } from "lucide-react";
+import { Lightbulb, ShieldCheck, UserPlus, Linkedin, Upload, Sparkles, LogIn, Trophy, Star, ThumbsUp, Send, Heart, Medal, MessageSquare, Users, BadgeCheck, CalendarDays, Briefcase, TrendingUp, Rocket, Megaphone, Mic2, Link, Handshake, GraduationCap } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useNavigate } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { db, auth } from "@/lib/firebase";
 import { doc, onSnapshot, getDoc, setDoc, collection, query, where, limit } from "firebase/firestore";
@@ -162,40 +163,155 @@ export default function Profile() {
 
   const [badgesLoadError, setBadgesLoadError] = useState<string|null>(null);
   useEffect(() => {
-    if (!user?.id) return;
-    const ref = doc(db, 'users', user.id, 'gamification', 'summary');
-    const unsub = onSnapshot(ref, {
-      next: (snap) => {
-        setBadgesLoadError(null);
-        const d = snap.data() as any;
-        if (d && Array.isArray(d.earnedBadges)) setEarnedBadges(d.earnedBadges);
-      },
-      error: (err) => {
-        console.warn('Gamification summary listener error', err);
-        setBadgesLoadError(err?.message || 'Permission denied');
-      }
-    });
-    return () => unsub();
-  }, [user?.id]);
-
-  // Ensure the gamification summary exists and always includes core 'Login' badge,
-  // even if the user never visited HomePage where it's normally persisted.
-  useEffect(() => {
+    let unsub: (() => void) | null = null;
     (async () => {
       if (!user?.id) return;
+      const ref = doc(db, 'users', user.id, 'gamification', 'summary');
       try {
-        const ref = doc(db, 'users', user.id, 'gamification', 'summary');
+        // Ensure doc exists first with a minimal payload so read rules can evaluate ownerUid
         const snap = await getDoc(ref);
-        const current = (snap.exists() && Array.isArray((snap.data() as any)?.earnedBadges)) ? (snap.data() as any).earnedBadges as string[] : [];
-        const merged = Array.from(new Set([...(current || []), 'Login']));
-        await setDoc(ref, { earnedBadges: merged, ownerUid: auth.currentUser?.uid || null }, { merge: true });
-      } catch {}
+        if (!snap.exists()) {
+          const uid = auth.currentUser?.uid;
+          if (uid) await setDoc(ref, { ownerUid: uid, earnedBadges: ['Login'] }, { merge: true });
+          else await setDoc(ref, { earnedBadges: ['Login'] }, { merge: true });
+        } else if ((snap.data() as any)?.ownerUid == null) {
+          const uid = auth.currentUser?.uid;
+          if (uid) await setDoc(ref, { ownerUid: uid }, { merge: true });
+        }
+        // Now safe to subscribe
+        unsub = onSnapshot(ref, {
+          next: async (s) => {
+            setBadgesLoadError(null);
+            const d = s.data() as any;
+            if (d && Array.isArray(d.earnedBadges)) {
+              const incoming: string[] = d.earnedBadges.map((x: any) => String(x));
+              const catByLC = new Map(badgeCatalog.map(b => [b.key.toLowerCase(), b.label] as [string,string]));
+              const normalized: string[] = [];
+              const seen = new Set<string>();
+              for (const raw of incoming) {
+                const lc = raw.toLowerCase();
+                const aliased = aliasMap[lc] || raw;
+                const targetLC = (aliasMap[lc] || aliased).toLowerCase();
+                const canonical = catByLC.get(targetLC) || aliased;
+                if (!seen.has(canonical)) { seen.add(canonical); normalized.push(canonical); }
+              }
+              // If normalization changed the array (length or any missing), backfill to Firestore
+              const changed = normalized.length !== incoming.length || normalized.some(k => !incoming.includes(k));
+              if (changed) {
+                try { await setDoc(ref, { earnedBadges: normalized }, { merge: true }); } catch {}
+              }
+              setEarnedBadges(normalized);
+            }
+          },
+          error: (err) => {
+            console.warn('Gamification summary listener error', err);
+            setBadgesLoadError(err?.message || 'Permission denied');
+          }
+        });
+      } catch (err: any) {
+        console.warn('Gamification bootstrap error', err);
+        setBadgesLoadError(err?.message || 'Permission denied');
+      }
     })();
+    return () => { if (unsub) unsub(); };
   }, [user?.id]);
 
   const experienceYears = watch("experienceYears");
   const mentorEligible = useMemo(() => (Number(experienceYears) || 0) >= 4, [experienceYears]);
   const earnedSetLC = useMemo(() => new Set((earnedBadges || []).map((k) => String(k).toLowerCase())), [earnedBadges]);
+  const navigate = useNavigate();
+
+  // Categorized badge catalog with icon + color
+  type BadgeItem = { key: string; label: string; hint: string; Icon: any; color: string; category: string; subcategory?: string };
+  const badgeCatalog: BadgeItem[] = [
+    // Profile / Identity
+    { key: 'Login', label: 'Login', hint: 'Sign in to the app', Icon: LogIn, color: 'bg-yellow-400 text-yellow-900', category: 'Profile / Identity' },
+    { key: 'Profile Complete', label: 'Complete Profile', hint: 'Fill all required profile fields', Icon: Trophy, color: 'bg-emerald-400 text-emerald-900', category: 'Profile / Identity' },
+    { key: 'Verified Profile', label: 'Verified', hint: 'Verified by super admin', Icon: BadgeCheck, color: 'bg-blue-400 text-blue-900', category: 'Profile / Identity' },
+
+    // Engagement
+    { key: 'First Connection', label: 'First Connection', hint: 'Make your first connection', Icon: Handshake, color: 'bg-violet-400 text-violet-900', category: 'Engagement' },
+    { key: 'First Message', label: 'First Message', hint: 'Send your first message', Icon: MessageSquare, color: 'bg-indigo-400 text-indigo-900', category: 'Engagement' },
+    { key: 'First Post', label: 'First Post', hint: 'Publish your first post', Icon: Send, color: 'bg-sky-400 text-sky-900', category: 'Engagement' },
+    { key: 'Community Helper', label: 'Community Helper', hint: '5+ helpful replies', Icon: Star, color: 'bg-lime-400 text-lime-900', category: 'Engagement' },
+    { key: 'Rising Star', label: 'Rising Star', hint: 'High post engagement', Icon: TrendingUp, color: 'bg-pink-400 text-pink-900', category: 'Engagement' },
+    { key: 'Networking Expert', label: 'Networking Expert', hint: 'High network activity', Icon: MessageSquare, color: 'bg-sky-500 text-sky-900', category: 'Engagement' },
+
+    // Learning + Career
+    { key: 'Attended Event', label: 'Attended Event', hint: 'Attend your first event', Icon: CalendarDays, color: 'bg-teal-400 text-teal-900', category: 'Learning + Career' },
+    { key: 'Mentorship Requested', label: 'Requested Mentorship', hint: 'Request mentorship', Icon: GraduationCap, color: 'bg-amber-400 text-amber-900', category: 'Learning + Career' },
+    { key: 'Applied for Job', label: 'Applied for Job/Internship', hint: 'Apply for a role', Icon: Briefcase, color: 'bg-orange-400 text-orange-900', category: 'Learning + Career' },
+    { key: 'Applicant Lv1', label: 'Applicant Lv1', hint: 'Apply 1 time', Icon: Briefcase, color: 'bg-orange-300 text-orange-900', category: 'Learning + Career' },
+    { key: 'Applicant Master', label: 'Applicant Master', hint: 'Apply 10 times', Icon: Briefcase, color: 'bg-amber-300 text-amber-900', category: 'Learning + Career' },
+    { key: 'Applicant Pro', label: 'Applicant Pro', hint: 'Apply 15 times', Icon: Briefcase, color: 'bg-yellow-300 text-yellow-900', category: 'Learning + Career' },
+    { key: 'Career Climber', label: 'Career Climber', hint: 'Apply 20 times', Icon: Briefcase, color: 'bg-orange-500 text-orange-900', category: 'Learning + Career' },
+
+    // Event Participation
+    { key: 'Event Leader', label: 'Event Leader', hint: 'Speak or organize an event', Icon: Megaphone, color: 'bg-purple-400 text-purple-900', category: 'Event Participation' },
+    { key: 'Event Goer', label: 'Event Goer', hint: 'Attend 1 event', Icon: CalendarDays, color: 'bg-cyan-400 text-cyan-900', category: 'Event Participation' },
+
+    // Streak / Activity
+    { key: '7-Day Active', label: '7-Day Active', hint: 'Active for 7 consecutive days', Icon: Rocket, color: 'bg-red-400 text-red-900', category: 'Streak / Activity' },
+
+    // Alumni: Identity & Credibility
+    { key: 'Verified Alumni', label: 'Verified Alumni', hint: 'Alumni verification complete', Icon: BadgeCheck, color: 'bg-blue-400 text-blue-900', category: 'Alumni', subcategory: 'Identity & Credibility' },
+    { key: 'Legacy Member', label: 'Legacy Member', hint: '3+ years after graduation', Icon: Medal, color: 'bg-yellow-500 text-yellow-900', category: 'Alumni', subcategory: 'Identity & Credibility' },
+
+    // Alumni: Mentorship & Community
+    { key: 'Mentor', label: 'Mentor', hint: 'First mentee assigned', Icon: GraduationCap, color: 'bg-emerald-400 text-emerald-900', category: 'Alumni', subcategory: 'Mentorship & Community' },
+    { key: 'Super Mentor', label: 'Super Mentor', hint: 'Positive mentee feedback', Icon: Star, color: 'bg-lime-400 text-lime-900', category: 'Alumni', subcategory: 'Mentorship & Community' },
+    { key: 'Network Builder', label: 'Network Builder', hint: '50+ connections', Icon: Link, color: 'bg-violet-400 text-violet-900', category: 'Alumni', subcategory: 'Mentorship & Community' },
+
+    // Alumni: Career Milestones
+    { key: 'First Job', label: 'Employed / First Job', hint: 'Started your first job', Icon: Briefcase, color: 'bg-amber-400 text-amber-900', category: 'Alumni', subcategory: 'Career Milestones' },
+    { key: 'Manager', label: 'Manager / Team Lead', hint: 'Promoted to team lead or manager', Icon: Trophy, color: 'bg-teal-400 text-teal-900', category: 'Alumni', subcategory: 'Career Milestones' },
+    { key: 'Founder', label: 'Founder / Entrepreneur', hint: 'Launched your own venture', Icon: Rocket, color: 'bg-red-400 text-red-900', category: 'Alumni', subcategory: 'Career Milestones' },
+
+    // Alumni: Contribution
+    { key: 'Employer Referral', label: 'Employer Referral', hint: 'Referred a candidate', Icon: Megaphone, color: 'bg-sky-400 text-sky-900', category: 'Alumni', subcategory: 'Contribution' },
+    { key: 'Event Speaker', label: 'Event Speaker', hint: 'Spoke at an event', Icon: Mic2, color: 'bg-purple-400 text-purple-900', category: 'Alumni', subcategory: 'Contribution' },
+  ];
+
+  const categoriesOrder = ['Profile / Identity','Engagement','Learning + Career','Event Participation','Streak / Activity','Alumni'];
+  const alumniSubOrder = ['Identity & Credibility','Mentorship & Community','Career Milestones','Contribution'];
+
+  // Legacy -> Canonical aliases to avoid key mismatches
+  const aliasMap: Record<string, string> = {
+    'connect level 1': 'First Connection',
+    'loable': 'Network Builder',
+    'mentor seeker lv1': 'Requested Mentorship',
+    'community favorite': 'Community Helper',
+  };
+
+  // Where to go to earn each badge
+  const badgeActions: Record<string, { tab?: string; label: string } | undefined> = {
+    'login': undefined,
+    'profile complete': { tab: 'profile', label: 'Complete Profile' },
+    'verified profile': undefined,
+    'first connection': { tab: 'directory', label: 'Find Connections' },
+    'first message': { tab: 'messages', label: 'Send a Message' },
+    'first post': { tab: 'community', label: 'Create a Post' },
+    'community helper': { tab: 'community', label: 'Reply to Posts' },
+    'rising star': { tab: 'community', label: 'Engage on Posts' },
+    'attended event': { tab: 'events', label: 'Browse Events' },
+    'mentorship requested': { tab: 'mentorship', label: 'Request Mentorship' },
+    'applied for job': { tab: 'careers', label: 'Explore Jobs' },
+    'event leader': { tab: 'events', label: 'Speak/Organize' },
+    'event goer': { tab: 'events', label: 'Attend Event' },
+    '7-day active': { tab: '', label: 'Stay Active' },
+    // Alumni
+    'verified alumni': undefined,
+    'legacy member': undefined,
+    'mentor': { tab: 'mentorship', label: 'Mentor Students' },
+    'super mentor': { tab: 'mentorship', label: 'Support Mentees' },
+    'network builder': { tab: 'directory', label: 'Grow Network' },
+    'first job': { tab: 'careers', label: 'Career Progress' },
+    'manager': undefined,
+    'founder': undefined,
+    'employer referral': { tab: 'careers', label: 'Refer Candidate' },
+    'event speaker': { tab: 'events', label: 'Speak at Event' },
+    'first like': { tab: 'community', label: 'Like a Post' },
+  };
 
   useEffect(() => {
     const exp = Number(experienceYears) || 0;
@@ -237,7 +353,9 @@ export default function Profile() {
         const existing: string[] = (snap.exists() && Array.isArray((snap.data() as any)?.earnedBadges)) ? (snap.data() as any).earnedBadges : [];
         const merged = Array.from(new Set([...(existing || []), ...core]));
         if (merged.length !== existing.length) {
-          await setDoc(ref, { earnedBadges: merged, ownerUid: auth.currentUser?.uid || null }, { merge: true });
+          const uid = auth.currentUser?.uid;
+          if (uid) await setDoc(ref, { earnedBadges: merged, ownerUid: uid }, { merge: true });
+          else await setDoc(ref, { earnedBadges: merged }, { merge: true });
         }
       } catch {}
     })();
@@ -418,25 +536,6 @@ export default function Profile() {
   if (!serverUser) return <div className="p-8 text-destructive">Failed to load profile.</div>;
 
   const needsCompletion = !serverUser.profileCompleted;
-
-  const badgeCatalog: Array<{ key: string; label: string; hint: string }> = [
-    { key: 'Login', label: 'Login', hint: 'Sign in to the app' },
-    { key: 'Profile Complete', label: 'Profile Complete', hint: 'Fill all required profile fields' },
-    { key: 'First Post', label: 'First Post', hint: 'Create your first community post' },
-    { key: 'First Like', label: 'First Like', hint: 'Like a post' },
-    { key: 'Connect Level 1', label: 'Connect Lv1', hint: 'Make 5 connections' },
-    { key: 'Master', label: 'Master Connector', hint: 'Make 10 connections' },
-    { key: 'Loable', label: 'Loable', hint: 'Make 15 connections' },
-    { key: 'Networking Expert', label: 'Networking Expert', hint: 'Make 20 connections' },
-    { key: 'Applicant Lv1', label: 'Applicant Lv1', hint: 'Apply 5 times' },
-    { key: 'Applicant Master', label: 'Applicant Master', hint: 'Apply 10 times' },
-    { key: 'Applicant Pro', label: 'Applicant Pro', hint: 'Apply 15 times' },
-    { key: 'Career Climber', label: 'Career Climber', hint: 'Apply 20 times' },
-    { key: 'Mentor Seeker Lv1', label: 'Mentor Seeker Lv1', hint: 'Request 5 mentorships' },
-    { key: 'Mentorship Master', label: 'Mentorship Master', hint: 'Request 10 mentorships' },
-    { key: 'Community Favorite', label: 'Community Favorite', hint: 'Request 15 mentorships' },
-    { key: 'Guidance Guru', label: 'Guidance Guru', hint: 'Request 20 mentorships' },
-  ];
 
   return (
     <div className="container mx-auto max-w-5xl p-6 min-h-[75vh]">
@@ -935,28 +1034,60 @@ export default function Profile() {
                     <div className="text-xs text-muted-foreground">{badgeCatalog.filter(b=>earnedSetLC.has(b.key.toLowerCase())).length} unlocked</div>
                   </div>
                   <TooltipProvider>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                      {badgeCatalog.filter(b => earnedSetLC.has(b.key.toLowerCase())).map((b, i) => {
-                        const hues = ['from-yellow-200 to-yellow-400','from-pink-200 to-pink-400','from-blue-200 to-blue-400','from-violet-200 to-violet-400','from-emerald-200 to-emerald-400','from-orange-200 to-orange-400'];
-                        const g = hues[i % hues.length];
-                        return (
-                          <Tooltip key={b.key}>
-                            <TooltipTrigger asChild>
-                              <div className={`p-4 rounded-xl border text-center bg-gradient-to-br ${g} dark:from-zinc-800 dark:to-zinc-700 border-transparent shadow-sm`}> 
-                                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{b.label}</div>
-                                <div className="mt-1 text-xs text-zinc-700 dark:text-zinc-200">Unlocked</div>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>{b.hint}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        );
-                      })}
-                      {badgeCatalog.filter(b => earnedSetLC.has(b.key.toLowerCase())).length === 0 && (
-                        <div className="col-span-full text-sm text-muted-foreground">No badges yet. Start by completing your profile or making your first post!</div>
-                      )}
-                    </div>
+                    {categoriesOrder.map((cat) => {
+                      const earnedInCat = badgeCatalog.filter(b => b.category === cat && earnedSetLC.has(b.key.toLowerCase()));
+                      if (earnedInCat.length === 0) return null;
+                      return (
+                        <div key={`ach_${cat}`} className="mb-4">
+                          <div className="text-xs font-semibold text-muted-foreground mb-2">{cat}</div>
+                          {cat !== 'Alumni' ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                              {earnedInCat.map((b) => (
+                                <Tooltip key={b.key}>
+                                  <TooltipTrigger asChild>
+                                    <div className="p-4 rounded-xl border text-center bg-background">
+                                      <div className={`mx-auto h-14 w-14 rounded-full flex items-center justify-center ${b.color}`}>
+                                        <b.Icon className="h-7 w-7" />
+                                      </div>
+                                      <div className="mt-2 text-sm font-medium">{b.label}</div>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent><p>{b.hint}</p></TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          ) : (
+                            alumniSubOrder.map((sub) => {
+                              const earnedInSub = earnedInCat.filter(b => b.subcategory === sub);
+                              if (earnedInSub.length === 0) return null;
+                              return (
+                                <div key={`ach_${cat}_${sub}`} className="mb-3">
+                                  <div className="text-[11px] font-medium text-muted-foreground mb-1">{sub}</div>
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                    {earnedInSub.map((b) => (
+                                      <Tooltip key={b.key}>
+                                        <TooltipTrigger asChild>
+                                          <div className="p-4 rounded-xl border text-center bg-background">
+                                            <div className={`mx-auto h-14 w-14 rounded-full flex items-center justify-center ${b.color}`}>
+                                              <b.Icon className="h-7 w-7" />
+                                            </div>
+                                            <div className="mt-2 text-sm font-medium">{b.label}</div>
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>{b.hint}</p></TooltipContent>
+                                      </Tooltip>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      );
+                    })}
+                    {badgeCatalog.filter(b => earnedSetLC.has(b.key.toLowerCase())).length === 0 && (
+                      <div className="text-sm text-muted-foreground">No badges yet. Start by completing your profile or making your first post!</div>
+                    )}
                   </TooltipProvider>
                 </div>
 
@@ -966,21 +1097,67 @@ export default function Profile() {
                     <div className="text-xs text-muted-foreground">{badgeCatalog.filter(b=>!earnedSetLC.has(b.key.toLowerCase())).length} remaining</div>
                   </div>
                   <TooltipProvider>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                      {badgeCatalog.filter(b => !earnedSetLC.has(b.key.toLowerCase())).map((b) => (
-                        <Tooltip key={b.key}>
-                          <TooltipTrigger asChild>
-                            <div className="p-4 rounded-xl border text-center bg-muted/40 border-dashed">
-                              <div className="text-sm font-medium opacity-70">{b.label}</div>
-                              <div className="mt-1 text-xs text-muted-foreground">Locked</div>
+                    {categoriesOrder.map((cat) => {
+                      const lockedInCat = badgeCatalog.filter(b => b.category === cat && !earnedSetLC.has(b.key.toLowerCase()));
+                      if (lockedInCat.length === 0) return null;
+                      return (
+                        <div key={`lock_${cat}`} className="mb-4">
+                          <div className="text-xs font-semibold text-muted-foreground mb-2">{cat}</div>
+                          {cat !== 'Alumni' ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                              {lockedInCat.map((b) => (
+                                <Tooltip key={b.key}>
+                                  <TooltipTrigger asChild>
+                                    <div className="p-4 rounded-xl border text-center bg-muted/40">
+                                      <div className={`mx-auto h-14 w-14 rounded-full flex items-center justify-center border border-dashed text-muted-foreground`}>
+                                        <b.Icon className="h-7 w-7 opacity-60" />
+                                      </div>
+                                      <div className="mt-2 text-sm font-medium opacity-70">{b.label}</div>
+                                      {(() => { const act = badgeActions[b.key.toLowerCase()]; return act && act.tab ? (
+                                        <Button size="sm" className="mt-2 h-7 px-2 text-[11px] bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]"
+                                          onClick={() => navigate({ pathname: '/', search: `?tab=${act.tab}` })}
+                                        >{act.label}</Button>
+                                      ) : null; })()}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent><p>{b.hint}</p></TooltipContent>
+                                </Tooltip>
+                              ))}
                             </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>{b.hint}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      ))}
-                    </div>
+                          ) : (
+                            alumniSubOrder.map((sub) => {
+                              const lockedInSub = lockedInCat.filter(b => b.subcategory === sub);
+                              if (lockedInSub.length === 0) return null;
+                              return (
+                                <div key={`lock_${cat}_${sub}`} className="mb-3">
+                                  <div className="text-[11px] font-medium text-muted-foreground mb-1">{sub}</div>
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                    {lockedInSub.map((b) => (
+                                      <Tooltip key={b.key}>
+                                        <TooltipTrigger asChild>
+                                          <div className="p-4 rounded-xl border text-center bg-muted/40">
+                                            <div className={`mx-auto h-14 w-14 rounded-full flex items-center justify-center border border-dashed text-muted-foreground`}>
+                                              <b.Icon className="h-7 w-7 opacity-60" />
+                                            </div>
+                                            <div className="mt-2 text-sm font-medium opacity-70">{b.label}</div>
+                                            {(() => { const act = badgeActions[b.key.toLowerCase()]; return act && act.tab ? (
+                                              <Button size="sm" className="mt-2 h-7 px-2 text-[11px] bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]"
+                                                onClick={() => navigate({ pathname: '/', search: `?tab=${act.tab}` })}
+                                              >{act.label}</Button>
+                                            ) : null; })()}
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>{b.hint}</p></TooltipContent>
+                                      </Tooltip>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      );
+                    })}
                   </TooltipProvider>
                 </div>
               </CardContent>
