@@ -1,7 +1,7 @@
  
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "@/lib/firebase";
-import { collection, collectionGroup, deleteDoc, doc, getDoc, onSnapshot, setDoc, updateDoc, query, where, limit } from "firebase/firestore";
+import { collection, collectionGroup, deleteDoc, doc, getDoc, onSnapshot, setDoc, updateDoc, query, where, limit, arrayUnion } from "firebase/firestore";
 import { Users, Calendar, Briefcase, Heart, Star, Eye, ThumbsUp, Target, BarChart3, Sparkles, Flame, Trophy, Bolt, BadgeCheck, FileText, LogIn, Send, MessageSquare, Rocket, Megaphone, Mic2, Link as LinkIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,10 +42,12 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   });
   const [streakDays] = useState<number>(3);
   const [level] = useState<number>(1);
-  const [missions, setMissions] = useState<Array<{ id: 'connect'|'apply'|'request'|'host'; title: string; progress: number }>>([
-    { id: 'connect', title: "Connect with alumni's", progress: 0 },
+  const [missions, setMissions] = useState<Array<{ id: 'connect'|'apply'|'request'|'host'|'community'|'event'; title: string; progress: number }>>([
+    { id: 'connect', title: 'Connect with alumni', progress: 0 },
     { id: 'apply', title: 'Apply to job', progress: 0 },
     { id: 'request', title: 'Request mentorship', progress: 0 },
+    { id: 'community', title: 'Engage in community', progress: 0 },
+    { id: 'event', title: 'Register for event', progress: 0 },
   ]);
   const [points, setPoints] = useState<number>(0);
   const [connectCount, setConnectCount] = useState<number>(0);
@@ -57,6 +59,39 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   const [hasPost, setHasPost] = useState<boolean>(false);
   const [hasLiked, setHasLiked] = useState<boolean>(false);
   const [showProfilePrompt, setShowProfilePrompt] = useState(false);
+  const [showAllMissions, setShowAllMissions] = useState(false);
+  // Rising-edge trackers
+  const prevConnectRef = useRef<number>(0);
+  const prevApplyRef = useRef<number>(0);
+  const prevMentorRef = useRef<number>(0);
+  const prevHasPostRef = useRef<boolean>(false);
+  const prevHasLikeRef = useRef<boolean>(false);
+  const summaryHydratedRef = useRef<boolean>(false);
+  const postsHydratedRef = useRef<boolean>(false);
+  // Layout: lock Today's Mission height to match right column stack
+  const rightColRef = useRef<HTMLDivElement | null>(null);
+  const [rightColHeight, setRightColHeight] = useState<number>(0);
+  useEffect(() => {
+    const el = rightColRef.current;
+    if (!el) return;
+    const measure = () => {
+      try { setRightColHeight(el.getBoundingClientRect().height); } catch {}
+    };
+    measure();
+    let ro: ResizeObserver | null = null;
+    try {
+      ro = new ResizeObserver(() => measure());
+      ro.observe(el);
+    } catch {}
+    const onWin = () => measure();
+    window.addEventListener('resize', onWin);
+    const id = window.setInterval(measure, 800); // fallback in case of dynamic content
+    return () => {
+      if (ro) try { ro.disconnect(); } catch {}
+      window.removeEventListener('resize', onWin);
+      window.clearInterval(id);
+    };
+  }, [user?.role]);
 
   const getNewBadges = (kind: 'connect'|'apply'|'request'|'host', count: number, current: string[]) => {
     const newOnes: string[] = [];
@@ -81,6 +116,19 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     return newOnes;
   };
 
+  // Realtime task progress from live signals
+  const taskProgress = (id: 'connect'|'apply'|'request'|'host'|'community'|'event') => {
+    switch (id) {
+      case 'connect': return connectCount > 0 ? 100 : 0;
+      case 'apply': return applyCount > 0 ? 100 : 0;
+      case 'request': return mentorshipCount > 0 ? 100 : 0;
+      case 'community': return (hasPost || hasLiked) ? 100 : 0;
+      case 'event': return 0; // TODO: set to 100 when RSVP implemented
+      case 'host': return 0;
+      default: return 0;
+    }
+  };
+
   const persistGamification = async (payload?: Partial<{ points: number; connectCount: number; applyCount: number; mentorshipCount: number; earnedBadges: string[] }>) => {
     if (!user?.id) return;
     const body = {
@@ -94,35 +142,20 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     await setDoc(doc(db, 'users', user.id, 'gamification', 'summary'), body, { merge: true });
   };
 
-  const persistMissions = async (nextMissions: Array<{ id: 'connect'|'apply'|'request'|'host'; title: string; progress: number }>) => {
+  const persistMissions = async (nextMissions: Array<{ id: 'connect'|'apply'|'request'|'host'|'community'|'event'; title: string; progress: number }>) => {
     if (!user?.id) return;
     const today = new Date();
     const key = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
     await setDoc(doc(db, 'users', user.id, 'missions', 'today'), { dateKey: key, missions: nextMissions }, { merge: true });
   };
 
-  const handleMissionAction = async (id: 'connect'|'apply'|'request'|'host') => {
-    const nextPoints = points + 10;
-    const nextMissions = missions.map((m) => m.id === id ? { ...m, progress: Math.min(100, m.progress + 50) } : m);
-    let nConnect = connectCount, nApply = applyCount, nReq = mentorshipCount;
-    if (id === 'connect') nConnect += 1;
-    if (id === 'apply') nApply += 1;
-    if (id === 'request') nReq += 1;
-    const newBadges = getNewBadges(id, id === 'connect' ? nConnect : id === 'apply' ? nApply : nReq, earnedBadges);
-    const allBadges = newBadges.length ? [...earnedBadges, ...newBadges] : earnedBadges;
-    if (newBadges.length) toast.success(`Badge unlocked: ${newBadges.join(', ')}`);
-    setPoints(nextPoints);
-    setMissions(nextMissions);
-    setConnectCount(nConnect);
-    setApplyCount(nApply);
-    setMentorshipCount(nReq);
-    setEarnedBadges(allBadges);
-    await persistGamification({ points: nextPoints, connectCount: nConnect, applyCount: nApply, mentorshipCount: nReq, earnedBadges: allBadges });
-    await persistMissions(nextMissions);
+  const handleMissionAction = async (id: 'connect'|'apply'|'request'|'host'|'community'|'event') => {
+    // Only navigate. Points and badges are awarded by the actual feature flows (backend/listeners)
     if (id === 'connect') onNavigate('directory');
     if (id === 'apply') onNavigate('careers');
     if (id === 'request') onNavigate('mentorship');
-    if (id === 'host') onNavigate('events');
+    if (id === 'host' || id === 'event') onNavigate('events');
+    if (id === 'community') onNavigate('community');
   };
 
   useEffect(() => {
@@ -163,18 +196,83 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
         setEarnedBadges(normalized);
         setBadgesLoaded(true);
       }
+      // Hydrate rising-edge baselines on first snapshot to avoid awarding on reload
+      if (!summaryHydratedRef.current) {
+        prevConnectRef.current = Number(d?.connectCount || 0);
+        prevApplyRef.current = Number(d?.applyCount || 0);
+        prevMentorRef.current = Number(d?.mentorshipCount || 0);
+        summaryHydratedRef.current = true;
+      }
     });
     return () => unsub();
   }, [user?.id]);
+
+  // Award +10 points on real increases (connections/applications/mentorship)
+  useEffect(() => {
+    if (!user?.id || !badgesLoaded || !summaryHydratedRef.current) return;
+    const updates: Array<Promise<any>> = [];
+    const sumRef = doc(db, 'users', user.id, 'gamification', 'summary');
+    // Connection accepted: on increase
+    if (connectCount > (prevConnectRef.current || 0)) {
+      updates.push(setDoc(sumRef, { points: (points || 0) + 10 }, { merge: true }));
+      prevConnectRef.current = connectCount;
+    } else if (connectCount !== (prevConnectRef.current || 0)) {
+      prevConnectRef.current = connectCount;
+    }
+    // Applications
+    if (applyCount > (prevApplyRef.current || 0)) {
+      updates.push(setDoc(sumRef, { points: (points || 0) + 10 }, { merge: true }));
+      prevApplyRef.current = applyCount;
+    } else if (applyCount !== (prevApplyRef.current || 0)) {
+      prevApplyRef.current = applyCount;
+    }
+    // Mentorship
+    if (mentorshipCount > (prevMentorRef.current || 0)) {
+      updates.push(setDoc(sumRef, { points: (points || 0) + 10 }, { merge: true }));
+      prevMentorRef.current = mentorshipCount;
+    } else if (mentorshipCount !== (prevMentorRef.current || 0)) {
+      prevMentorRef.current = mentorshipCount;
+    }
+    if (updates.length) { Promise.allSettled(updates); }
+  }, [user?.id, badgesLoaded, connectCount, applyCount, mentorshipCount]);
+
+  // Award +10 points on first post/first like (rising edge) and ensure badge present
+  useEffect(() => {
+    if (!user?.id || !badgesLoaded) return;
+    const sumRef = doc(db, 'users', user.id, 'gamification', 'summary');
+    const toRun: Array<Promise<any>> = [];
+    if (postsHydratedRef.current && hasPost && !prevHasPostRef.current) {
+      toRun.push(setDoc(sumRef, { points: (points || 0) + 10, earnedBadges: arrayUnion('First Post') }, { merge: true }));
+    }
+    if (postsHydratedRef.current && hasLiked && !prevHasLikeRef.current) {
+      toRun.push(setDoc(sumRef, { points: (points || 0) + 10, earnedBadges: arrayUnion('First Like') }, { merge: true }));
+    }
+    prevHasPostRef.current = hasPost;
+    prevHasLikeRef.current = hasLiked;
+    if (toRun.length) { Promise.allSettled(toRun); }
+  }, [user?.id, badgesLoaded, hasPost, hasLiked]);
 
   // Core badge sources: First Post and First Like
   useEffect(() => {
     if (!user?.id) return;
     if (!badgesLoaded) return; // wait until server badges have loaded to avoid clobbering
     const q1 = query(collection(db, 'posts'), where('authorId', '==', user.id), limit(1));
-    const unsub1 = onSnapshot(q1, (snap) => setHasPost(!snap.empty));
+    const unsub1 = onSnapshot(q1, (snap) => {
+      const v = !snap.empty;
+      setHasPost(v);
+      if (!postsHydratedRef.current) {
+        prevHasPostRef.current = v;
+      }
+    });
     const q2 = query(collection(db, 'posts'), where('likes', 'array-contains', user.id), limit(1));
-    const unsub2 = onSnapshot(q2, (snap) => setHasLiked(!snap.empty));
+    const unsub2 = onSnapshot(q2, (snap) => {
+      const v = !snap.empty;
+      setHasLiked(v);
+      if (!postsHydratedRef.current) {
+        prevHasLikeRef.current = v;
+        postsHydratedRef.current = true;
+      }
+    });
     return () => { unsub1(); unsub2(); };
   }, [user?.id, badgesLoaded]);
 
@@ -482,47 +580,59 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong min-h-[260px]">
-          <CardHeader>
+        <Card className="lg:col-span-2 rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong min-h-[260px] flex flex-col overflow-hidden" style={{ height: rightColHeight ? rightColHeight : undefined }}>
+          <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2"><Bolt className="h-5 w-5" /> Today's Mission</CardTitle>
-            <CardDescription>Complete tasks to level up</CardDescription>
+            <CardDescription>Complete tasks to get badges</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 p-5">
-            <div className="flex items-center justify-between text-sm mb-1">
-              <div className="text-muted-foreground">Points</div>
-              <div className="font-semibold">{points}</div>
+          <CardContent className="space-y-2 p-5 pt-0 flex-1 min-h-0 flex flex-col">
+            <div className="flex items-center justify-between">
+              <div className="text-sm md:text-base text-muted-foreground">
+                Total Points: <span className="text-foreground font-semibold text-base md:text-lg">{points}</span>
+              </div>
             </div>
-            <div className="space-y-3 max-h-60 overflow-auto pr-1">
-              {missions.map(m => (
+            <div className={`space-y-3 flex-1 min-h-0 overflow-auto pr-1`}>
+              {(showAllMissions ? missions : missions.slice(0,3)).map((m, idx) => (
                 <div key={m.id} className="p-3 rounded-xl border flex items-center justify-between gap-3 hover:bg-accent/50 transition-colors">
-                  <div className="text-sm font-medium">
+                  <div className="text-sm font-medium truncate flex items-center gap-2">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[11px]">{(showAllMissions ? missions : missions.slice(0,3)).findIndex(x=>x.id===m.id) + 1}</span>
                     {user?.role === 'alumni'
                       ? (m.id === 'apply' ? 'Post a job'
                         : m.id === 'connect' ? 'Connect with students'
                         : m.id === 'request' ? 'Mentor students'
                         : m.id === 'host' ? 'Host events'
+                        : m.id === 'community' ? 'Engage in community'
+                        : m.id === 'event' ? 'Register for event'
                         : m.title)
-                      : m.title}
+                      : (m.id === 'connect' ? 'Connect with alumni'
+                        : m.id === 'apply' ? 'Apply to job'
+                        : m.id === 'request' ? 'Request mentorship'
+                        : m.id === 'community' ? 'Engage in community'
+                        : m.id === 'event' ? 'Register for event'
+                        : m.title)}
                   </div>
                   <div className="flex-1 max-w-[280px]">
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary transition-all duration-700" style={{ width: `${m.progress}%` }} />
+                      <div className="h-full bg-primary transition-all duration-700" style={{ width: `${taskProgress(m.id)}%` }} />
                     </div>
                   </div>
                   <Button size="sm" className="bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]" onClick={() => handleMissionAction(m.id)}>
                     {m.id === 'apply' ? (user?.role === 'alumni' ? 'Post' : 'Apply')
                       : m.id === 'request' ? (user?.role === 'alumni' ? 'Mentor' : 'Request')
-                      : m.id === 'host' ? 'Host'
-                      : 'Connect'}
+                      : (m.id === 'host' ? 'Host' : m.id === 'community' ? 'Open' : m.id === 'event' ? 'RSVP' : 'Connect')}
                   </Button>
                 </div>
               ))}
+              {!showAllMissions && missions.length > 3 && (
+                <div className="flex justify-center">
+                  <Button size="sm" variant="outline" onClick={() => setShowAllMissions(true)}>Load more</Button>
+                </div>
+              )}
             </div>
-            <Button className="w-full bg-[#1e3a8a] text-white hover:bg-[#60a5fa]">Start Mission</Button>
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
+        <div className="space-y-6" ref={rightColRef}>
           <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong h-24 md:h-20">
             <CardContent className="px-4 py-3 h-full flex items-center">
               {user?.role === 'alumni' ? (
@@ -579,11 +689,11 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
             </Card>
           ) : (
             <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border bg-background">
-              <CardHeader>
+              <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Featured Mentors</CardTitle>
                 <CardDescription>Top mentor</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3 p-5">
+              <CardContent className="space-y-2 p-5 pt-3">
                 {featuredMentors.slice(0,3).map(m => (
                   <div key={m.id} className="flex items-center justify-between p-2 rounded-lg border hover:bg-muted/50">
                     <div className="flex items-center gap-3">
@@ -599,10 +709,22 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                         <div className="text-xs text-muted-foreground">{m.role}</div>
                       </div>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => onNavigate('mentorship')}>Request</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:hover:bg-yellow-900/10"
+                      onClick={() => onNavigate('mentorship')}
+                    >
+                      Request
+                    </Button>
                   </div>
                 ))}
-                <Button className="w-full mt-1" variant="outline" onClick={() => onNavigate('mentorship')}>See more</Button>
+                <Button
+                  className="w-full mt-1 text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
+                  onClick={() => onNavigate('mentorship')}
+                >
+                  See more
+                </Button>
               </CardContent>
             </Card>
           )}
