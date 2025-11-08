@@ -1,4 +1,4 @@
-import { Bell, MessageSquare, User, Menu, GraduationCap, X } from "lucide-react";
+import { Bell, MessageSquare, User, Menu, GraduationCap, X, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,7 +15,7 @@ import { useAuth } from "@/store/auth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { db, auth } from "@/lib/firebase";
-import { collection, onSnapshot, query, where, updateDoc, setDoc, doc, arrayUnion } from "firebase/firestore";
+import { collection, onSnapshot, query, where, updateDoc, setDoc, doc, arrayUnion, getDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 interface HeaderProps {
@@ -41,6 +41,29 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
   const ringOscRef = useRef<OscillatorNode | null>(null);
   const ringGainRef = useRef<GainNode | null>(null);
   const [userInteracted, setUserInteracted] = useState(false);
+  const [earnedBadges, setEarnedBadges] = useState<string[]>([]);
+  const aliasMap: Record<string, string> = {
+    'connect level 1': 'First Connection',
+    'loable': 'Network Builder',
+    'mentor seeker lv1': 'Requested Mentorship',
+    'community favorite': 'Community Helper',
+  };
+  const catalogKeysLC = [
+    'Login','Profile Complete','First Post','First Like','First Connection','First Message','Community Helper','Rising Star','Networking Expert',
+    'Attended Event','Mentorship Requested','Applied for Job','Applicant Lv1','Applicant Master','Applicant Pro','Career Climber',
+    'Event Leader','Event Goer','7-Day Active','Verified Alumni','Legacy Member','Mentor','Super Mentor','Network Builder','First Job','Manager','Founder','Employer Referral','Event Speaker'
+  ].map(k => k.toLowerCase());
+  const properCase = [
+    'Login','Profile Complete','First Post','First Like','First Connection','First Message','Community Helper','Rising Star','Networking Expert',
+    'Attended Event','Mentorship Requested','Applied for Job','Applicant Lv1','Applicant Master','Applicant Pro','Career Climber',
+    'Event Leader','Event Goer','7-Day Active','Verified Alumni','Legacy Member','Mentor','Super Mentor','Network Builder','First Job','Manager','Founder','Employer Referral','Event Speaker'
+  ];
+  const toCanonical = (raw: string): string => {
+    const lc = String(raw).toLowerCase();
+    const aliased = aliasMap[lc] || raw;
+    const idx = catalogKeysLC.indexOf(String(aliased).toLowerCase());
+    return idx >= 0 ? properCase[idx] : String(aliased);
+  };
 
   // Subscribe to my conversations for header dropdown and notifications
   useEffect(() => {
@@ -175,6 +198,32 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     return () => { /* no-op */ };
   }, [incomingCall, userInteracted]);
 
+  // Bootstrap summary doc and ensure 'Login' badge is present on auth load
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!user?.id) return;
+        if (auth.currentUser?.isAnonymous) return;
+        const sumRef = doc(db, 'users', user.id, 'gamification', 'summary');
+        await setDoc(sumRef, { ownerUid: auth.currentUser?.uid || undefined, earnedBadges: arrayUnion('Login') }, { merge: true });
+      } catch {}
+    })();
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (auth.currentUser?.isAnonymous) return;
+    const ref = doc(db, 'users', user.id, 'gamification', 'summary');
+    const unsub = onSnapshot(ref, (snap) => {
+      const d = snap.data() as any;
+      if (d && Array.isArray(d.earnedBadges)) {
+        const normalized: string[] = Array.from(new Set<string>(d.earnedBadges.map((x: any) => toCanonical(String(x)))));
+        setEarnedBadges(normalized);
+      } else setEarnedBadges([]);
+    });
+    return () => unsub();
+  }, [user?.id]);
+
   const goMessages = () => navigate({ pathname: "/", search: "?tab=messages" });
   const openConversation = (c: any) => {
     const me = user?.id || "me";
@@ -203,6 +252,25 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
       const data = (snap.data() as any) || {};
       const arr: string[] = Array.isArray(data.headerDismissedConvIds) ? data.headerDismissedConvIds : [];
       setDismissedConvIds(new Set(arr));
+      // Also: award Profile Complete badge as soon as profile is complete (global watcher)
+      (async () => {
+        try {
+          if (!user?.id) return;
+          if (auth.currentUser?.isAnonymous) return;
+          const completed = Boolean(
+            data?.complete === true ||
+            data?.profileCompleted === true ||
+            (
+              data?.program && data?.batchSeason && data?.batchYear &&
+              data?.profileHeadline && data?.location &&
+              ((Array.isArray(data?.skills) && data.skills.length > 0) || data?.skills || data?.currentCompany)
+            )
+          );
+          if (!completed) return;
+          const sumRef = doc(db, 'users', user.id, 'gamification', 'summary');
+          await setDoc(sumRef, { ownerUid: auth.currentUser?.uid || undefined, earnedBadges: arrayUnion('Login', 'Profile Complete') }, { merge: true });
+        } catch {}
+      })();
     });
     return () => unsub();
   }, [user?.id]);
@@ -240,6 +308,37 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
         {/* User Actions */}
         {currentUser && (
           <div className="flex items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative">
+                  <Award className="h-5 w-5" />
+                  {earnedBadges.length > 0 && (
+                    <Badge 
+                      variant="secondary" 
+                      className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs"
+                    >
+                      {Math.min(earnedBadges.length, 9)}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                {earnedBadges.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground">No badges yet</div>
+                ) : (
+                  earnedBadges.slice(0, 6).map((b) => (
+                    <DropdownMenuItem key={b} className="flex items-center gap-2">
+                      <Award className="h-4 w-4" />
+                      <span className="truncate">{b}</span>
+                    </DropdownMenuItem>
+                  ))
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate({ pathname: "/", search: "?tab=profile" })}>
+                  See all
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {/* Notifications */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

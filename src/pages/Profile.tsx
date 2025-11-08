@@ -347,7 +347,8 @@ export default function Profile() {
     (async () => {
       if (!user?.id) return;
       try {
-        const core = ['Login', ...(allComplete ? ['Profile Complete'] : []), ...(hasPost ? ['First Post'] : []), ...(hasLiked ? ['First Like'] : [])];
+        const stableComplete = Boolean(serverUser?.profileCompleted || allComplete);
+        const core = ['Login', ...(stableComplete ? ['Profile Complete'] : []), ...(hasPost ? ['First Post'] : []), ...(hasLiked ? ['First Like'] : [])];
         const ref = doc(db, 'users', user.id, 'gamification', 'summary');
         const snap = await getDoc(ref);
         const existing: string[] = (snap.exists() && Array.isArray((snap.data() as any)?.earnedBadges)) ? (snap.data() as any).earnedBadges : [];
@@ -359,7 +360,7 @@ export default function Profile() {
         }
       } catch {}
     })();
-  }, [user?.id, allComplete, hasPost, hasLiked]);
+  }, [user?.id, serverUser?.profileCompleted, allComplete, hasPost, hasLiked]);
 
   const missingS1: string[] = useMemo(() => {
     const arr: string[] = [];
@@ -414,13 +415,27 @@ export default function Profile() {
   );
 
   const [showConfetti, setShowConfetti] = useState(false);
+  const prevCompleteRef = useRef<boolean>(false);
   useEffect(() => {
-    if (allComplete) {
+    // Use stable completion from server or derived form state
+    const completed = Boolean(serverUser?.profileCompleted || allComplete);
+    const key = user?.id ? `profile_confetti_done_${user.id}` : `profile_confetti_done`;
+    const done = (() => { try { return localStorage.getItem(key) === '1'; } catch { return false; } })();
+    const wasComplete = prevCompleteRef.current;
+    // Fire only on rising edge and when not already celebrated
+    if (!wasComplete && completed && !done) {
       setShowConfetti(true);
       const t = setTimeout(() => setShowConfetti(false), 3000);
+      try { localStorage.setItem(key, '1'); } catch {}
+      prevCompleteRef.current = true;
       return () => clearTimeout(t);
     }
-  }, [allComplete]);
+    // Allow celebration reset only when definitively incomplete (and after initial load)
+    if (!completed && !loading) {
+      try { localStorage.removeItem(key); } catch {}
+      prevCompleteRef.current = false;
+    }
+  }, [serverUser?.profileCompleted, allComplete, loading, user?.id]);
 
   const ConfettiBurst = () => (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-center">
@@ -522,6 +537,23 @@ export default function Profile() {
       setServerUser(res.user);
       // refresh auth user so global header reflects latest profile picture/headline
       refresh().catch(() => {});
+      // Immediately persist Profile Complete badge if criteria met
+      try {
+        if (user?.id) {
+          const stableComplete = Boolean(res?.user?.profileCompleted || (Boolean(data.name) && Boolean(serverUser?.email || res?.user?.email) && true) && Boolean(data.program) && Boolean(data.batchSeason) && Boolean(data.batchYear) && Boolean(data.profileHeadline) && Boolean(data.location) && (Boolean(data.skills) || Boolean(data.currentCompany)));
+          if (stableComplete) {
+            const ref = doc(db, 'users', user.id, 'gamification', 'summary');
+            const snap = await getDoc(ref);
+            const existing: string[] = (snap.exists() && Array.isArray((snap.data() as any)?.earnedBadges)) ? (snap.data() as any).earnedBadges : [];
+            if (!existing.includes('Profile Complete')) {
+              const merged = Array.from(new Set([...(existing || []), 'Login', 'Profile Complete']));
+              const uid = auth.currentUser?.uid;
+              if (uid) await setDoc(ref, { earnedBadges: merged, ownerUid: uid }, { merge: true });
+              else await setDoc(ref, { earnedBadges: merged }, { merge: true });
+            }
+          }
+        }
+      } catch {}
       toast.success("Profile updated");
     } catch (e: any) {
       toast.error(e.message || "Update failed");

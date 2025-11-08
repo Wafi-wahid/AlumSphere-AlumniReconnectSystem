@@ -52,6 +52,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   const [applyCount, setApplyCount] = useState<number>(0);
   const [mentorshipCount, setMentorshipCount] = useState<number>(0);
   const [earnedBadges, setEarnedBadges] = useState<string[]>([]);
+  const [badgesLoaded, setBadgesLoaded] = useState(false);
   const [profileComplete, setProfileComplete] = useState<boolean>(false);
   const [hasPost, setHasPost] = useState<boolean>(false);
   const [hasLiked, setHasLiked] = useState<boolean>(false);
@@ -126,6 +127,30 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
 
   useEffect(() => {
     if (!user?.id) return;
+    const aliasMap: Record<string, string> = {
+      'connect level 1': 'First Connection',
+      'loable': 'Network Builder',
+      'mentor seeker lv1': 'Requested Mentorship',
+      'community favorite': 'Community Helper',
+    };
+    const catalogKeys = [
+      'Login','Profile Complete','First Post','First Like','First Connection','First Message','Community Helper','Rising Star','Networking Expert',
+      'Attended Event','Mentorship Requested','Applied for Job','Applicant Lv1','Applicant Master','Applicant Pro','Career Climber',
+      'Event Leader','Event Goer','7-Day Active','Verified Alumni','Legacy Member','Mentor','Super Mentor','Network Builder','First Job','Manager','Founder','Employer Referral','Event Speaker'
+    ].map(k => k.toLowerCase());
+    const toCanonical = (raw: string): string => {
+      const lc = raw.toLowerCase();
+      const aliased = aliasMap[lc] || raw;
+      const lc2 = aliased.toLowerCase();
+      // if it's one of our known keys (case-insensitive), return the properly cased label from list; else return aliased raw
+      const idx = catalogKeys.indexOf(lc2);
+      if (idx >= 0) return [
+        'Login','Profile Complete','First Post','First Like','First Connection','First Message','Community Helper','Rising Star','Networking Expert',
+        'Attended Event','Mentorship Requested','Applied for Job','Applicant Lv1','Applicant Master','Applicant Pro','Career Climber',
+        'Event Leader','Event Goer','7-Day Active','Verified Alumni','Legacy Member','Mentor','Super Mentor','Network Builder','First Job','Manager','Founder','Employer Referral','Event Speaker'
+      ][idx];
+      return aliased;
+    };
     const unsub = onSnapshot(doc(db, 'users', user.id, 'gamification', 'summary'), (snap) => {
       const d = snap.data() as any;
       if (!d) return;
@@ -133,7 +158,11 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
       if (typeof d.connectCount === 'number') setConnectCount(d.connectCount);
       if (typeof d.applyCount === 'number') setApplyCount(d.applyCount);
       if (typeof d.mentorshipCount === 'number') setMentorshipCount(d.mentorshipCount);
-      if (Array.isArray(d.earnedBadges)) setEarnedBadges(d.earnedBadges);
+      if (Array.isArray(d.earnedBadges)) {
+        const normalized: string[] = Array.from(new Set<string>(d.earnedBadges.map((x: any) => toCanonical(String(x)))));
+        setEarnedBadges(normalized);
+        setBadgesLoaded(true);
+      }
     });
     return () => unsub();
   }, [user?.id]);
@@ -141,23 +170,25 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   // Core badge sources: First Post and First Like
   useEffect(() => {
     if (!user?.id) return;
+    if (!badgesLoaded) return; // wait until server badges have loaded to avoid clobbering
     const q1 = query(collection(db, 'posts'), where('authorId', '==', user.id), limit(1));
     const unsub1 = onSnapshot(q1, (snap) => setHasPost(!snap.empty));
     const q2 = query(collection(db, 'posts'), where('likes', 'array-contains', user.id), limit(1));
     const unsub2 = onSnapshot(q2, (snap) => setHasLiked(!snap.empty));
     return () => { unsub1(); unsub2(); };
-  }, [user?.id]);
+  }, [user?.id, badgesLoaded]);
 
   // Ensure core badges are persisted (Login always; plus Profile Complete, First Post, First Like)
   useEffect(() => {
     if (!user?.id) return;
+    if (!badgesLoaded) return; // ensure we have server state first
     const core = ['Login', ...(profileComplete ? ['Profile Complete'] : []), ...(hasPost ? ['First Post'] : []), ...(hasLiked ? ['First Like'] : [])];
     const merged = Array.from(new Set([...(earnedBadges || []), ...core]));
     if (merged.length !== earnedBadges.length) {
       setEarnedBadges(merged);
       persistGamification({ earnedBadges: merged });
     }
-  }, [user?.id, profileComplete, hasPost, hasLiked]);
+  }, [user?.id, badgesLoaded, profileComplete, hasPost, hasLiked]);
 
   // Profile completeness (from profiles/{id}); falls back to heuristic if field missing
   useEffect(() => {
@@ -487,45 +518,6 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 </div>
               ))}
             </div>
-            {earnedBadges.length > 0 && (
-              <div className="pt-2 border-t mt-2">
-                <div className="text-xs text-muted-foreground mb-2">Badges earned</div>
-                {(() => {
-                  const catalog: Array<{ key: string; label: string; Icon: any; color: string }> = [
-                    { key: 'Login', label: 'Login', Icon: LogIn, color: 'bg-yellow-400 text-yellow-900' },
-                    { key: 'Profile Complete', label: 'Complete Profile', Icon: Trophy, color: 'bg-emerald-400 text-emerald-900' },
-                    { key: 'First Post', label: 'First Post', Icon: Send, color: 'bg-sky-400 text-sky-900' },
-                    { key: 'First Like', label: 'First Like', Icon: Heart, color: 'bg-pink-400 text-pink-900' },
-                    { key: 'First Connection', label: 'First Connection', Icon: Users, color: 'bg-violet-400 text-violet-900' },
-                    { key: 'First Message', label: 'First Message', Icon: MessageSquare, color: 'bg-indigo-400 text-indigo-900' },
-                    { key: 'Community Helper', label: 'Community Helper', Icon: Star, color: 'bg-lime-400 text-lime-900' },
-                    { key: 'Rising Star', label: 'Rising Star', Icon: ThumbsUp, color: 'bg-pink-400 text-pink-900' },
-                    { key: 'Attended Event', label: 'Attended Event', Icon: Calendar, color: 'bg-cyan-400 text-cyan-900' },
-                    { key: 'Mentorship Requested', label: 'Requested Mentorship', Icon: Users, color: 'bg-amber-400 text-amber-900' },
-                    { key: 'Applied for Job', label: 'Applied for Job', Icon: Briefcase, color: 'bg-orange-400 text-orange-900' },
-                    { key: 'Event Leader', label: 'Event Leader', Icon: Megaphone, color: 'bg-purple-400 text-purple-900' },
-                    { key: 'Event Goer', label: 'Event Goer', Icon: Calendar, color: 'bg-cyan-400 text-cyan-900' },
-                    { key: '7-Day Active', label: '7-Day Active', Icon: Rocket, color: 'bg-red-400 text-red-900' },
-                    { key: 'Verified Alumni', label: 'Verified Alumni', Icon: BadgeCheck, color: 'bg-blue-400 text-blue-900' },
-                    { key: 'Network Builder', label: 'Network Builder', Icon: LinkIcon, color: 'bg-violet-400 text-violet-900' },
-                  ];
-                  const lc = new Set(earnedBadges.map(k => String(k).toLowerCase()));
-                  const list = catalog.filter(c => lc.has(c.key.toLowerCase()));
-                  return (
-                    <div className="flex flex-wrap gap-4">
-                      {list.map((b) => (
-                        <div key={b.key} className="text-center">
-                          <div className={`mx-auto h-12 w-12 rounded-full flex items-center justify-center ${b.color}`}>
-                            <b.Icon className="h-6 w-6" />
-                          </div>
-                          <div className="mt-1 text-[11px] font-medium">{b.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
             <Button className="w-full bg-[#1e3a8a] text-white hover:bg-[#60a5fa]">Start Mission</Button>
           </CardContent>
         </Card>
