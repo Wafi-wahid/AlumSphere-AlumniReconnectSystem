@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { BrandLoader } from "@/components/ui/BrandLoader";
@@ -12,12 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Lightbulb, ShieldCheck, UserPlus, Linkedin, Upload } from "lucide-react";
+import { Lightbulb, ShieldCheck, UserPlus, Linkedin, Upload, Sparkles } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { db } from "@/lib/firebase";
-import { doc, onSnapshot } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase";
+import { doc, onSnapshot, getDoc, setDoc, collection, query, where, limit } from "firebase/firestore";
 
 const years = Array.from({ length: 2025 - 2010 + 1 }, (_, i) => 2010 + i);
 const seasons = ["Spring", "Fall"] as const;
@@ -44,10 +45,61 @@ type FormData = z.infer<typeof schema>;
 
 export default function Profile() {
   const { user, refresh } = useAuth();
+  const isStudent = user?.role === 'student';
   const [loading, setLoading] = useState(true);
   const [serverUser, setServerUser] = useState<any>(null);
   const [tab, setTab] = useState<'profile'|'password'|'achievements'>('profile');
   const [earnedBadges, setEarnedBadges] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [mentorDialogOpen, setMentorDialogOpen] = useState(false);
+  const [mentorPromptShown, setMentorPromptShown] = useState(false);
+  const [templates, setTemplates] = useState<{
+    headlines: string[];
+    locations: string[];
+    skillsCategories: Record<string, string[]>;
+    departments: string[];
+  }>({
+    headlines: [
+      'Software Engineering Student',
+      'Aspiring Full-Stack Developer',
+      'AI & ML Enthusiast',
+      'Web Developer in Progress',
+      'Future Cloud Engineer',
+      'Cybersecurity Learner',
+      'Blockchain Explorer',
+      'UI/UX Design Student',
+      'Data Science Beginner',
+      'Tech Innovator Student',
+    ],
+    locations: [
+      'Islamabad, PK',
+      'Rawalpindi, PK',
+      'Lahore, PK',
+      'Faisalabad, PK',
+      'Karachi, PK',
+    ],
+    skillsCategories: {
+      Programming: ['Java', 'C++', 'Python', 'TypeScript', 'JavaScript'],
+      Web: ['React', 'Node.js', 'Express', 'HTML', 'CSS', 'Tailwind', 'Next.js'],
+      Mobile: ['React Native', 'Flutter'],
+      'AI/ML': ['TensorFlow', 'PyTorch', 'Scikit-Learn', 'OpenCV'],
+      Cloud: ['AWS', 'Firebase', 'Docker'],
+      Design: ['Figma', 'UI/UX', 'Adobe XD'],
+      Database: ['MongoDB', 'PostgreSQL', 'SQLite', 'Prisma'],
+      'Soft Skills': ['Communication', 'Leadership', 'Problem Solving'],
+    },
+    departments: [
+      'Software Engineering',
+      'Computer Science',
+      'Computer Arts',
+      'CyberSecurity',
+    ],
+  });
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [headlineMenu, setHeadlineMenu] = useState(false);
+  const [skillsMenu, setSkillsMenu] = useState(false);
+  const [locationMenu, setLocationMenu] = useState(false);
+  const [departmentMenu, setDepartmentMenu] = useState(false);
 
   const {
     register,
@@ -81,21 +133,208 @@ export default function Profile() {
         setLoading(false);
       }
     })();
-    // Ensure header avatar updates if coming back from LinkedIn redirect
-    refresh().catch(() => {});
-  }, [reset, refresh]);
+  }, []);
+
+  // Load templates from Firestore if available
+  useEffect(() => {
+    (async () => {
+      try {
+        const ref = doc(db, 'templates', 'profile');
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          const d = snap.data() as any;
+          setTemplates((prev) => ({
+            headlines: Array.isArray(d.headlines) ? d.headlines : prev.headlines,
+            locations: Array.isArray(d.locations) ? d.locations : prev.locations,
+            skillsCategories: d.skillsCategories && typeof d.skillsCategories === 'object' ? d.skillsCategories : prev.skillsCategories,
+            departments: Array.isArray(d.departments) ? d.departments : prev.departments,
+          }));
+        }
+      } catch (_) {
+        // ignore and keep defaults
+      }
+    })();
+  }, []);
 
   useEffect(() => {
+    refresh().catch(() => {});
+  }, []);
+
+  const [badgesLoadError, setBadgesLoadError] = useState<string|null>(null);
+  useEffect(() => {
     if (!user?.id) return;
-    const unsub = onSnapshot(doc(db, 'users', user.id, 'gamification', 'summary'), (snap) => {
-      const d = snap.data() as any;
-      if (d && Array.isArray(d.earnedBadges)) setEarnedBadges(d.earnedBadges);
+    const ref = doc(db, 'users', user.id, 'gamification', 'summary');
+    const unsub = onSnapshot(ref, {
+      next: (snap) => {
+        setBadgesLoadError(null);
+        const d = snap.data() as any;
+        if (d && Array.isArray(d.earnedBadges)) setEarnedBadges(d.earnedBadges);
+      },
+      error: (err) => {
+        console.warn('Gamification summary listener error', err);
+        setBadgesLoadError(err?.message || 'Permission denied');
+      }
     });
     return () => unsub();
   }, [user?.id]);
 
+  // Ensure the gamification summary exists and always includes core 'Login' badge,
+  // even if the user never visited HomePage where it's normally persisted.
+  useEffect(() => {
+    (async () => {
+      if (!user?.id) return;
+      try {
+        const ref = doc(db, 'users', user.id, 'gamification', 'summary');
+        const snap = await getDoc(ref);
+        const current = (snap.exists() && Array.isArray((snap.data() as any)?.earnedBadges)) ? (snap.data() as any).earnedBadges as string[] : [];
+        const merged = Array.from(new Set([...(current || []), 'Login']));
+        await setDoc(ref, { earnedBadges: merged, ownerUid: auth.currentUser?.uid || null }, { merge: true });
+      } catch {}
+    })();
+  }, [user?.id]);
+
   const experienceYears = watch("experienceYears");
   const mentorEligible = useMemo(() => (Number(experienceYears) || 0) >= 4, [experienceYears]);
+  const earnedSetLC = useMemo(() => new Set((earnedBadges || []).map((k) => String(k).toLowerCase())), [earnedBadges]);
+
+  useEffect(() => {
+    const exp = Number(experienceYears) || 0;
+    if (isStudent && exp >= 4 && !mentorPromptShown) {
+      setMentorDialogOpen(true);
+      setMentorPromptShown(true);
+    }
+  }, [isStudent, experienceYears, mentorPromptShown]);
+
+  // Compute profile completion per requested sections
+  const section1Complete = !!(watch("name") && serverUser?.email && (watch("profilePicture") || true));
+  const section2Complete = !!(watch("program") && watch("batchSeason") && watch("batchYear"));
+  const section3Complete = !!(watch("profileHeadline") && watch("location") && (watch("skills") || watch("currentCompany")));
+  const completedCount = [section1Complete, section2Complete, section3Complete].filter(Boolean).length;
+  const completionPct = Math.round((completedCount / 3) * 100);
+  const allComplete = completionPct === 100;
+
+  // Track post/like to award badges from Profile as well
+  const [hasPost, setHasPost] = useState(false);
+  const [hasLiked, setHasLiked] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const q1 = query(collection(db, 'posts'), where('authorId', '==', user.id), limit(1));
+    const unsub1 = onSnapshot(q1, { next: (snap) => setHasPost(!snap.empty), error: () => {/* ignore permission denied for optional badge */} });
+    const q2 = query(collection(db, 'posts'), where('likes', 'array-contains', user.id), limit(1));
+    const unsub2 = onSnapshot(q2, { next: (snap) => setHasLiked(!snap.empty), error: () => {/* ignore permission denied for optional badge */} });
+    return () => { unsub1(); unsub2(); };
+  }, [user?.id]);
+
+  // Persist core badges here too so Achievements always reflects realtime status
+  useEffect(() => {
+    (async () => {
+      if (!user?.id) return;
+      try {
+        const core = ['Login', ...(allComplete ? ['Profile Complete'] : []), ...(hasPost ? ['First Post'] : []), ...(hasLiked ? ['First Like'] : [])];
+        const ref = doc(db, 'users', user.id, 'gamification', 'summary');
+        const snap = await getDoc(ref);
+        const existing: string[] = (snap.exists() && Array.isArray((snap.data() as any)?.earnedBadges)) ? (snap.data() as any).earnedBadges : [];
+        const merged = Array.from(new Set([...(existing || []), ...core]));
+        if (merged.length !== existing.length) {
+          await setDoc(ref, { earnedBadges: merged, ownerUid: auth.currentUser?.uid || null }, { merge: true });
+        }
+      } catch {}
+    })();
+  }, [user?.id, allComplete, hasPost, hasLiked]);
+
+  const missingS1: string[] = useMemo(() => {
+    const arr: string[] = [];
+    if (!watch('name')) arr.push('Name');
+    if (!serverUser?.email) arr.push('Email');
+    // profile picture optional; omit from required
+    return arr;
+  }, [watch('name'), serverUser?.email]);
+  const missingS2: string[] = useMemo(() => {
+    const arr: string[] = [];
+    if (!watch('program')) arr.push('Department');
+    if (!watch('batchSeason')) arr.push('Session');
+    if (!watch('batchYear')) arr.push('Batch Year');
+    return arr;
+  }, [watch('program'), watch('batchSeason'), watch('batchYear')]);
+  const missingS3: string[] = useMemo(() => {
+    const arr: string[] = [];
+    if (!watch('profileHeadline')) arr.push('Headline');
+    if (!watch('location')) arr.push('Location');
+    if (!watch('skills') && !watch('currentCompany')) arr.push('Skills or Company');
+    if (watch('experienceYears') === undefined || watch('experienceYears') === null) arr.push('Experience');
+    return arr;
+  }, [watch('profileHeadline'), watch('location'), watch('skills'), watch('currentCompany'), watch('experienceYears')]);
+
+  const SectionMarker = ({ label, missing }: { label: string; missing: string[] }) => (
+    <div className="relative flex items-center gap-2 mt-2 mb-3">
+      <div className="h-px flex-1 bg-muted" />
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className={`flex items-center gap-2 px-2 py-1 rounded-full border text-xs ${missing.length ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/10' : 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/10'}`}>
+              <span className={`h-2 w-2 rounded-full ${missing.length ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <span className="font-medium">{label}</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            {missing.length ? (
+              <div className="text-xs">
+                <div className="font-medium mb-1">Complete these:</div>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {missing.map((m) => (<li key={m}>{m}</li>))}
+                </ul>
+              </div>
+            ) : (
+              <div className="text-xs text-emerald-600">Section complete</div>
+            )}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <div className="h-px flex-1 bg-muted" />
+    </div>
+  );
+
+  const [showConfetti, setShowConfetti] = useState(false);
+  useEffect(() => {
+    if (allComplete) {
+      setShowConfetti(true);
+      const t = setTimeout(() => setShowConfetti(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [allComplete]);
+
+  const ConfettiBurst = () => (
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-center">
+      <style>{`
+        @keyframes fall { from { transform: translateY(-20vh) rotate(0deg); opacity: 1;} to { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+      `}</style>
+      <div className="relative w-full h-0">
+        {Array.from({ length: 40 }).map((_, i) => {
+          const left = Math.random() * 100;
+          const delay = Math.random() * 0.6;
+          const duration = 1.8 + Math.random() * 0.8;
+          const size = 6 + Math.random() * 6;
+          const colors = ["#FFB800", "#1e3a8a", "#60a5fa", "#34d399", "#f472b6"]; 
+          const bg = colors[i % colors.length];
+          return (
+            <span
+              key={i}
+              style={{
+                left: `${left}%`,
+                width: size,
+                height: size,
+                background: bg,
+                animation: `fall ${duration}s linear ${delay}s forwards`,
+              }}
+              className="absolute top-0 rounded-sm"
+            />
+          );
+        })}
+      </div>
+      <div className="hidden" style={{ animationName: 'fall' }} />
+    </div>
+  );
 
   const onUploadAvatar = async (file: File) => {
     try {
@@ -116,8 +355,45 @@ export default function Profile() {
     }
   };
 
+  // Skills helpers: toggle chip selection and sync to input as comma-separated
+  const addSkill = (s: string) => {
+    setSelectedSkills((cur) => {
+      if (cur.includes(s)) return cur;
+      const next = [...cur, s];
+      setValue('skills', next.join(', '));
+      return next;
+    });
+  };
+  const removeSkill = (s: string) => {
+    setSelectedSkills((cur) => {
+      const next = cur.filter((x) => x !== s);
+      setValue('skills', next.join(', '));
+      return next;
+    });
+  };
+  const toggleSkill = (s: string) => {
+    setSelectedSkills((cur) => {
+      const has = cur.includes(s);
+      const next = has ? cur.filter((x) => x !== s) : [...cur, s];
+      setValue('skills', next.join(', '));
+      return next;
+    });
+  };
+
+  // Initialize selectedSkills from existing value when form loads
+  useEffect(() => {
+    const val = (watch('skills') || '') as string;
+    const init = val.split(',').map((s) => s.trim()).filter(Boolean);
+    setSelectedSkills(init);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
   const onSubmit = async (data: FormData) => {
     try {
+      if (isStudent && Number(data.experienceYears) > 5) {
+        toast.error('Students can enter up to 5 years of experience');
+        return;
+      }
       const payload = {
         ...data,
         profilePicture: data.profilePicture || undefined,
@@ -180,19 +456,37 @@ export default function Profile() {
 
         <div className="space-y-6 relative z-0 min-w-0">
           <TabsContent value="profile" className="hidden m-0 data-[state=active]:block">
-            {needsCompletion && (
-              <Card className="border-2 border-amber-300/50 bg-amber-50/50 dark:bg-amber-900/10 mb-4">
-                <CardHeader className="flex flex-row items-center gap-3">
-                  <Lightbulb className="text-amber-500" />
-                  <div>
-                    <CardTitle>Complete your profile</CardTitle>
-                    <CardDescription>
-                      Add your program, headline, location, and skills to get better recommendations.
-                    </CardDescription>
+            {showConfetti && <ConfettiBurst />}
+            <Card className="mb-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Student Profile Progress</CardTitle>
+                <CardDescription>Complete all sections to finish your profile</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="h-2 w-full rounded bg-muted overflow-hidden">
+                  <div className="h-full bg-[#FFB800]" style={{ width: `${completionPct}%` }} />
+                </div>
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>{completionPct}% complete</span>
+                  {allComplete ? <span className="text-emerald-600">All sections complete</span> : <span>{3 - completedCount} remaining</span>}
+                </div>
+                <div className="grid md:grid-cols-3 gap-3 mt-2">
+                  <div className={`rounded-lg border p-3 ${section1Complete ? 'border-emerald-300/60 bg-emerald-50 dark:bg-emerald-900/10' : 'bg-muted/30'}`}>
+                    <div className="font-medium text-sm">section 1: already fetched data or sync data</div>
+                    <div className="text-xs text-muted-foreground">Name, email, profile picture</div>
                   </div>
-                </CardHeader>
-              </Card>
-            )}
+                  <div className={`rounded-lg border p-3 ${section2Complete ? 'border-emerald-300/60 bg-emerald-50 dark:bg-emerald-900/10' : 'bg-muted/30'}`}>
+                    <div className="font-medium text-sm">section 2: acedemics detail</div>
+                    <div className="text-xs text-muted-foreground">Department, session</div>
+                  </div>
+                  <div className={`rounded-lg border p-3 ${section3Complete ? 'border-emerald-300/60 bg-emerald-50 dark:bg-emerald-900/10' : 'bg-muted/30'}`}>
+                    <div className="font-medium text-sm">section 3: career</div>
+                    <div className="text-xs text-muted-foreground">Skills, interests, headline, company, experience</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
 
             <Card className="min-h-[640px]">
               <CardHeader>
@@ -200,6 +494,7 @@ export default function Profile() {
                 <CardDescription>Review your details and complete the rest.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                <SectionMarker label="Section 1: Already fetched data" missing={missingS1} />
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16">
                     <AvatarImage src={watch("profilePicture") || undefined} alt={watch("name")} />
@@ -212,51 +507,109 @@ export default function Profile() {
                       {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="headline">Profile Headline</Label>
-                      <Input id="headline" placeholder="e.g., Final-year SE student exploring AI/ML" {...register("profileHeadline")} />
-                      {errors.profileHeadline && <p className="text-xs text-destructive">{errors.profileHeadline.message}</p>}
+                      <Label htmlFor="email">Email</Label>
+                      <Input id="email" value={serverUser.email || ''} disabled readOnly />
                     </div>
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-3">
+                <div className="grid md:grid-cols-[1fr,1.25fr] gap-3">
                   <div className="grid gap-2">
                     <Label htmlFor="avatar">Profile Picture</Label>
-                    <div className="flex items-center gap-3">
-                      <Input id="avatar" type="file" accept="image/*" onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) onUploadAvatar(f);
-                      }} />
-                      <Button type="button" variant="secondary" onClick={() => setValue('profilePicture', '')}>
+                    <div className="flex flex-col items-start gap-2">
+                      <input
+                        ref={fileInputRef}
+                        id="avatar"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) onUploadAvatar(f);
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-blue-500 text-blue-600 hover:border-red-500 hover:text-red-600 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-red-500"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload className="h-4 w-4 mr-2" />Choose file
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-blue-500 text-blue-600 hover:border-red-500 hover:text-red-600 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-red-500"
+                        onClick={() => setValue('profilePicture', '')}
+                      >
                         <Upload className="h-4 w-4 mr-2" />Clear
                       </Button>
                     </div>
-                    {watch('profilePicture') && (
-                      <p className="text-xs text-muted-foreground">Stored as: {watch('profilePicture')}</p>
-                    )}
                   </div>
-                  <div className="grid gap-2">
-                    <Label>Sync with LinkedIn</Label>
-                    <p className="text-xs text-muted-foreground">Import your name, email, headline and profile picture.</p>
-                    <div>
-                      <Button type="button" variant="linkedin" onClick={() => {
-                        const base = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-                        window.location.href = `${base}/auth/linkedin/start`;
-                      }}>
-                        <Linkedin className="h-4 w-4 mr-2" /> Sync LinkedIn Profile
+                  <div className="relative overflow-hidden rounded-xl p-4 text-white bg-gradient-to-br from-[#0b1b3a] to-[#1e3a8a]">
+                    <div className="relative z-[1] space-y-1.5">
+                      <div className="text-xs uppercase tracking-wide opacity-80">LinkedIn sync</div>
+                      <div className="text-base font-semibold leading-snug">Do you want to sync your LinkedIn profile here?</div>
+                      <p className="text-[11px] opacity-90">We can import your name, email, headline and profile picture now.</p>
+                      <Button
+                        type="button"
+                        className="mt-1.5 bg-[#FFB800] hover:bg-[#ffcb38] text-black border-0"
+                        onClick={() => {
+                          const base = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+                          window.location.href = `${base}/auth/linkedin/start`;
+                        }}
+                      >
+                        <Linkedin className="h-4 w-4 mr-2" /> Sync LinkedIn
                       </Button>
+                      <p className="text-[10px] opacity-90 mt-1.5">In future, you’ll be able to import your complete profile from LinkedIn.</p>
                     </div>
+                    <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-white/10" />
+                    <div className="absolute right-6 bottom-6 h-8 w-8 rounded-full bg-white/10" />
                   </div>
                 </div>
 
+                {/* Section 2: Academic details (Department/Session) */}
+                <SectionMarker label="section 2: acedemics detail" missing={missingS2} />
                 <div className="grid md:grid-cols-3 gap-3">
                   <div className="grid gap-2">
-                    <Label>Program</Label>
-                    <Input placeholder="Software Engineering" {...register("program")} />
+                    <Label>Department</Label>
+                    <div className="relative">
+                      <Input className="pr-10" placeholder="Software Engineering" {...register("program")}
+                        onFocus={()=>setDepartmentMenu(true)}
+                        onBlur={()=>setTimeout(()=>setDepartmentMenu(false),120)}
+                      />
+                      <button
+                        type="button"
+                        className="absolute inset-y-0 right-0 px-2 text-muted-foreground hover:text-foreground"
+                        aria-label="Department templates"
+                        onMouseDown={(e)=>{ e.preventDefault(); setDepartmentMenu((v)=>!v); }}
+                      >
+                        <Sparkles className="h-5 w-5" />
+                      </button>
+                      {departmentMenu && (
+                        <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow-sm max-h-56 overflow-auto">
+                          {(() => {
+                            const current = (watch('program') || '').trim();
+                            const first = templates.departments.filter((d) => current && d === current);
+                            const rest = templates.departments.filter((d) => !current || d !== current);
+                            return [...first, ...rest].map((dep) => (
+                              <button
+                                type="button"
+                                key={dep}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                onMouseDown={(e)=>{ e.preventDefault(); setValue('program', dep); setDepartmentMenu(false);} }
+                              >
+                                {dep}
+                              </button>
+                            ));
+                          })()}
+                        </div>
+                      )}
+                    </div>
                     {errors.program && <p className="text-xs text-destructive">{errors.program.message}</p>}
                   </div>
                   <div className="grid gap-2">
-                    <Label>Batch Season</Label>
+                    <Label>Session</Label>
                     <Select value={String(watch("batchSeason") || "")} onValueChange={(v) => setValue("batchSeason", v as any)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select" />
@@ -285,29 +638,179 @@ export default function Profile() {
                   </div>
                 </div>
 
+                {/* Section 3: Career */}
+                <SectionMarker label="section 3: career" missing={missingS3} />
                 <div className="grid md:grid-cols-3 gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="headline">Profile Headline</Label>
+                    <div className="relative">
+                      <Input
+                        className="pr-10"
+                        id="headline"
+                        placeholder="e.g., Final-year SE student exploring AI/ML"
+                        {...register("profileHeadline")}
+                        onFocus={() => setHeadlineMenu(true)}
+                        onBlur={() => setTimeout(()=>setHeadlineMenu(false), 120)}
+                      />
+                      <button
+                        type="button"
+                        className="absolute inset-y-0 right-0 px-2 text-muted-foreground hover:text-foreground"
+                        aria-label="Headline templates"
+                        onMouseDown={(e)=>{ e.preventDefault(); setHeadlineMenu((v)=>!v); }}
+                      >
+                        <Sparkles className="h-5 w-5" />
+                      </button>
+                      {headlineMenu && (
+                        <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow-sm max-h-56 overflow-auto">
+                          {(() => {
+                            const current = (watch('profileHeadline') || '').trim();
+                            const first = templates.headlines.filter((h) => current && h === current);
+                            const rest = templates.headlines.filter((h) => !current || h !== current);
+                            return [...first, ...rest].map((h) => (
+                              <button
+                                type="button"
+                                key={h}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                onMouseDown={(e)=>{ e.preventDefault(); setValue('profileHeadline', h); setHeadlineMenu(false); }}
+                              >
+                                {h}
+                              </button>
+                            ));
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                    {errors.profileHeadline && <p className="text-xs text-destructive">{errors.profileHeadline.message}</p>}
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="skills">Skills</Label>
+                    <div className="relative">
+                      <Input
+                        className="pr-10"
+                        id="skills"
+                        placeholder="Choose skills from below"
+                        {...register("skills")}
+                        onFocus={()=>setSkillsMenu(true)}
+                        onBlur={()=>setTimeout(()=>setSkillsMenu(false), 120)}
+                      />
+                      <button
+                        type="button"
+                        className="absolute inset-y-0 right-0 px-2 text-muted-foreground hover:text-foreground"
+                        aria-label="Add skill"
+                        onMouseDown={(e)=>{ e.preventDefault(); setSkillsMenu((v)=>!v); }}
+                      >
+                        <Sparkles className="h-5 w-5" />
+                      </button>
+                      {skillsMenu && (
+                        <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow-sm max-h-64 overflow-auto p-2">
+                          {selectedSkills.length > 0 && (
+                            <div className="mb-2">
+                              <div className="px-1 py-1 text-[11px] text-muted-foreground">Selected</div>
+                              <div className="flex flex-wrap gap-2 px-1 pb-1">
+                                {selectedSkills.map((it) => (
+                                  <button
+                                    type="button"
+                                    key={'sel-'+it}
+                                    className="text-xs px-2 py-1 rounded-md border bg-emerald-50 border-emerald-300 text-emerald-700"
+                                    onMouseDown={(e)=>{ e.preventDefault(); toggleSkill(it); }}
+                                  >
+                                    {it}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {Object.entries(templates.skillsCategories).map(([cat, items]) => {
+                            const remaining = items.filter((it) => !selectedSkills.includes(it));
+                            if (remaining.length === 0) return null;
+                            return (
+                              <div key={cat} className="mb-2">
+                                <div className="px-1 py-1 text-[11px] text-muted-foreground">{cat}</div>
+                                <div className="flex flex-wrap gap-2 px-1 pb-1">
+                                  {remaining.map((it) => (
+                                    <button
+                                      type="button"
+                                      key={cat+it}
+                                      className="text-xs px-2 py-1 rounded-md border hover:bg-muted"
+                                      onMouseDown={(e)=>{ e.preventDefault(); toggleSkill(it); }}
+                                    >
+                                      {it}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="location">Location</Label>
+                    <div className="relative">
+                      <Input
+                        className="pr-10"
+                        id="location"
+                        placeholder="City, Country"
+                        {...register("location")}
+                        onFocus={()=>setLocationMenu(true)}
+                        onBlur={()=>setTimeout(()=>setLocationMenu(false), 120)}
+                      />
+                      <button
+                        type="button"
+                        className="absolute inset-y-0 right-0 px-2 text-muted-foreground hover:text-foreground"
+                        aria-label="Location templates"
+                        onMouseDown={(e)=>{ e.preventDefault(); setLocationMenu((v)=>!v); }}
+                      >
+                        <Sparkles className="h-5 w-5" />
+                      </button>
+                      {locationMenu && (
+                        <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow-sm max-h-56 overflow-auto">
+                          {(() => {
+                            const current = (watch('location') || '').trim();
+                            const first = templates.locations.filter((l) => current && l === current);
+                            const rest = templates.locations.filter((l) => !current || l !== current);
+                            return [...first, ...rest].map((loc) => (
+                              <button
+                                type="button"
+                                key={loc}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                onMouseDown={(e)=>{ e.preventDefault(); setValue('location', loc); setLocationMenu(false);} }
+                              >
+                                {loc}
+                              </button>
+                            ));
+                          })()}
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                            onMouseDown={(e)=>{ e.preventDefault(); (document.getElementById('location') as HTMLInputElement | null)?.focus(); setLocationMenu(false);} }
+                          >
+                            Add Custom Location ✍️
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {errors.location && <p className="text-xs text-destructive">{errors.location.message}</p>}
+                  </div>
+                </div>
+                <div className="grid md:grid-cols-3 gap-3 items-end mt-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="exp">Years of Experience</Label>
+                    <Input id="exp" type="number" min={0} max={isStudent ? 5 : 60} {...register("experienceYears", { valueAsNumber: true })} />
+                  </div>
                   <div className="grid gap-2">
                     <Label htmlFor="company">Current Company</Label>
                     <Input id="company" placeholder="Optional" {...register("currentCompany")} />
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="skills">Skills</Label>
-                    <Input id="skills" placeholder="Comma-separated (e.g., React, Node, SQL)" {...register("skills")} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="location">Location</Label>
-                    <Input id="location" placeholder="City, Country" {...register("location")} />
-                    {errors.location && <p className="text-xs text-destructive">{errors.location.message}</p>}
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-3 gap-3 items-end">
-                  <div className="grid gap-2">
-                    <Label htmlFor="exp">Years of Experience</Label>
-                    <Input id="exp" type="number" min={0} max={60} {...register("experienceYears", { valueAsNumber: true })} />
-                  </div>
-                  <div className="md:col-span-2">
-                    {mentorEligible ? (
+                  <div className="md:col-span-2 flex items-center">
+                    {isStudent ? (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <UserPlus className="h-4 w-4" />
+                        If you have 4+ years of experience, mentor other students.
+                      </div>
+                    ) : mentorEligible ? (
                       <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
                         <ShieldCheck className="h-4 w-4" />
                         You are eligible to mentor others.
@@ -321,6 +824,29 @@ export default function Profile() {
                   </div>
                 </div>
 
+                {/* Mentorship consent dialog for students with 4+ years */}
+                <Dialog open={mentorDialogOpen} onOpenChange={setMentorDialogOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Mentor other students?</DialogTitle>
+                      <DialogDescription>
+                        You have 4+ years of experience. Would you like to make your profile available for mentorship requests from students?
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                      <Button variant="secondary" onClick={() => setMentorDialogOpen(false)}>Not now</Button>
+                      <Button
+                        onClick={() => {
+                          setMentorDialogOpen(false);
+                          toast.success('Thanks! We will surface your profile for mentorship (you can opt out later).');
+                        }}
+                      >
+                        Yes, I want to mentor
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
                 <div className="flex justify-end gap-3">
                   <Button variant="secondary" type="button" onClick={() => reset()} disabled={isSubmitting}>Reset</Button>
                   <Button variant="brand" className="text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
@@ -332,12 +858,12 @@ export default function Profile() {
           </TabsContent>
 
           <TabsContent value="password" className="hidden m-0 data-[state=active]:block">
-            <Card className="min-h-[640px]">
+            <Card>
               <CardHeader>
                 <CardTitle>Password & Email</CardTitle>
                 <CardDescription>Secure your account</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-6 pb-4">
                 <div className="grid md:grid-cols-3 gap-3">
                   <div className="grid gap-2">
                     <Label htmlFor="currentPassword">Current password</Label>
@@ -397,32 +923,66 @@ export default function Profile() {
           </TabsContent>
 
           <TabsContent value="achievements" className="hidden m-0 data-[state=active]:block">
-            <Card className="overflow-hidden min-h-[640px]">
+            <Card className="overflow-hidden">
               <CardHeader>
                 <CardTitle>Achievements</CardTitle>
                 <CardDescription>Badges you earned and how to unlock others</CardDescription>
               </CardHeader>
-              <CardContent className="overflow-x-hidden">
-                <TooltipProvider>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {badgeCatalog.map((b) => {
-                      const got = earnedBadges.includes(b.key);
-                      return (
+              <CardContent className="overflow-x-hidden space-y-8">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-sm font-medium">Achieved</div>
+                    <div className="text-xs text-muted-foreground">{badgeCatalog.filter(b=>earnedSetLC.has(b.key.toLowerCase())).length} unlocked</div>
+                  </div>
+                  <TooltipProvider>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {badgeCatalog.filter(b => earnedSetLC.has(b.key.toLowerCase())).map((b, i) => {
+                        const hues = ['from-yellow-200 to-yellow-400','from-pink-200 to-pink-400','from-blue-200 to-blue-400','from-violet-200 to-violet-400','from-emerald-200 to-emerald-400','from-orange-200 to-orange-400'];
+                        const g = hues[i % hues.length];
+                        return (
+                          <Tooltip key={b.key}>
+                            <TooltipTrigger asChild>
+                              <div className={`p-4 rounded-xl border text-center bg-gradient-to-br ${g} dark:from-zinc-800 dark:to-zinc-700 border-transparent shadow-sm`}> 
+                                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{b.label}</div>
+                                <div className="mt-1 text-xs text-zinc-700 dark:text-zinc-200">Unlocked</div>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{b.hint}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+                      {badgeCatalog.filter(b => earnedSetLC.has(b.key.toLowerCase())).length === 0 && (
+                        <div className="col-span-full text-sm text-muted-foreground">No badges yet. Start by completing your profile or making your first post!</div>
+                      )}
+                    </div>
+                  </TooltipProvider>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-sm font-medium">Locked</div>
+                    <div className="text-xs text-muted-foreground">{badgeCatalog.filter(b=>!earnedSetLC.has(b.key.toLowerCase())).length} remaining</div>
+                  </div>
+                  <TooltipProvider>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {badgeCatalog.filter(b => !earnedSetLC.has(b.key.toLowerCase())).map((b) => (
                         <Tooltip key={b.key}>
                           <TooltipTrigger asChild>
-                            <div className={`p-4 rounded-xl border text-center ${got ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-300/50' : 'bg-muted/30'}`}>
-                              <div className={`text-sm font-medium ${got ? '' : 'opacity-60'}`}>{b.label}</div>
-                              <div className={`mt-1 text-xs ${got ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>{got ? 'Unlocked' : 'Locked'}</div>
+                            <div className="p-4 rounded-xl border text-center bg-muted/40 border-dashed">
+                              <div className="text-sm font-medium opacity-70">{b.label}</div>
+                              <div className="mt-1 text-xs text-muted-foreground">Locked</div>
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>
                             <p>{b.hint}</p>
                           </TooltipContent>
                         </Tooltip>
-                      );
-                    })}
-                  </div>
-                </TooltipProvider>
+                      ))}
+                    </div>
+                  </TooltipProvider>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
