@@ -523,24 +523,24 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
         </Card>
 
         <div className="space-y-6">
-          <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
-            <CardContent className="p-5">
+          <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong h-24 md:h-20">
+            <CardContent className="px-4 py-3 h-full flex items-center">
               {user?.role === 'alumni' ? (
-                <div className="flex items-start gap-3">
+                <div className="flex items-center gap-3 w-full">
                   <Trophy className="h-6 w-6 text-yellow-500" />
-                  <div className="space-y-1">
+                  <div className="space-y-0.5 flex-1 min-w-0">
                     <div className="text-sm font-semibold">Share your story on Wall of Fame</div>
                     <div className="text-xs text-muted-foreground">Inspire students with your journey and tips.</div>
-                    <Button size="sm" className="mt-2" onClick={() => onNavigate('wallOfFame')}>Share your story</Button>
                   </div>
+                  <Button size="sm" className="shrink-0" onClick={() => onNavigate('wallOfFame')}>Share</Button>
                 </div>
               ) : (
-                <div className="flex items-start gap-3">
+                <div className="flex items-center gap-3 w-full">
                   <Trophy className="h-6 w-6 text-yellow-500" />
-                  <div className="space-y-1">
-                    <div className="text-sm font-semibold">Ali got an internship through Echo Alum Link 🎉</div>
-                    <div className="text-xs text-muted-foreground">Get guidance from mentors and land your first role.</div>
+                  <div className="space-y-0.5 flex-1 min-w-0">
+                    <div className="text-sm font-semibold">Ali got an internship through AlumSpere 🎉</div>
                   </div>
+                  <Button size="sm" className="shrink-0" onClick={() => onNavigate('wallOfFame')}>Read story</Button>
                 </div>
               )}
             </CardContent>
