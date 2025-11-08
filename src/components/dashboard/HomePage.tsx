@@ -33,12 +33,18 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     { id: 'skill', title: 'Learn new skill', done: false },
     { id: 'product', title: 'Create product', done: false },
   ]);
-  const [analytics, setAnalytics] = useState<{ profileViews7d: number; mentorshipRequested: number; mentorshipAccepted: number; postLikes7d: number; likesDaily7d: number[] }>({
+  const [analytics, setAnalytics] = useState<{ profileViews7d: number; mentorshipRequested: number; mentorshipAccepted: number; postLikes7d: number; likesDaily7d: number[]; connections7d?: number; connectionsDaily7d?: number[]; applied7d?: number; appliedDaily7d?: number[]; events7d?: number; eventsDaily7d?: number[] }>({
     profileViews7d: 0,
     mentorshipRequested: 0,
     mentorshipAccepted: 0,
     postLikes7d: 0,
     likesDaily7d: [],
+    connections7d: 0,
+    connectionsDaily7d: [],
+    applied7d: 0,
+    appliedDaily7d: [],
+    events7d: 0,
+    eventsDaily7d: [],
   });
   const [streakDays] = useState<number>(3);
   const [level] = useState<number>(1);
@@ -412,9 +418,15 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
           mentorshipAccepted: Number(d.mentorshipAccepted || 0),
           postLikes7d: Number(d.postLikes7d || 0),
           likesDaily7d: Array.isArray(d.likesDaily7d) ? d.likesDaily7d.map((n: any) => Number(n||0)) : [],
+          connections7d: Number(d.connections7d || 0),
+          connectionsDaily7d: Array.isArray(d.connectionsDaily7d) ? d.connectionsDaily7d.map((n: any) => Number(n||0)) : [],
+          applied7d: Number(d.applied7d || 0),
+          appliedDaily7d: Array.isArray(d.appliedDaily7d) ? d.appliedDaily7d.map((n: any) => Number(n||0)) : [],
+          events7d: Number(d.events7d || 0),
+          eventsDaily7d: Array.isArray(d.eventsDaily7d) ? d.eventsDaily7d.map((n: any) => Number(n||0)) : [],
         });
       } else {
-        setAnalytics({ profileViews7d: 0, mentorshipRequested: 0, mentorshipAccepted: 0, postLikes7d: 0, likesDaily7d: [] });
+        setAnalytics({ profileViews7d: 0, mentorshipRequested: 0, mentorshipAccepted: 0, postLikes7d: 0, likesDaily7d: [], connections7d: 0, connectionsDaily7d: [], applied7d: 0, appliedDaily7d: [], events7d: 0, eventsDaily7d: [] });
       }
     });
     return () => unsub();
@@ -492,6 +504,87 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     const area = `${path} L ${p + (n - 1) * stepX} ${h - p} L ${p} ${h - p} Z`;
     return { w, h, p, maxV, pts, path, area };
   }, [likesData]);
+  // Build weekday buckets in Mon-Sun order for horizontal bar chart
+  const weekOrder = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const weekColors: Record<string, string> = {
+    Mon: '#f59e0b', // amber-500
+    Tue: '#3b82f6', // blue-500
+    Wed: '#10b981', // emerald-500
+    Thu: '#ef4444', // red-500
+    Fri: '#8b5cf6', // violet-500
+    Sat: '#ec4899', // pink-500
+    Sun: '#06b6d4', // cyan-500
+  };
+  // Per-metric solid color palette (applied to bars)
+  const metricColors: Record<Metric, string> = {
+    likes: '#3b82f6', // blue
+    connections: '#8b5cf6', // violet
+    applied: '#f59e0b', // amber
+    events: '#10b981', // emerald
+  };
+  // Last 7 days weekday labels (Mon..Sun order when bucketed by label)
+  const weekdayLabels7 = useMemo(() => {
+    const labels: string[] = [];
+    const today = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(today.getDate() - (6 - i));
+      labels.push(d.toLocaleDateString(undefined, { weekday: 'short' }));
+    }
+    return labels;
+  }, []);
+  // Chart animation + hover tooltip
+  const [chartAnim, setChartAnim] = useState(false);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  useEffect(() => {
+    const t = window.setTimeout(() => setChartAnim(true), 50);
+    return () => window.clearTimeout(t);
+  }, []);
+  // Analytics metric selector
+  type Metric = 'likes' | 'connections' | 'applied' | 'events';
+  const [metric, setMetric] = useState<Metric>('likes');
+  const METRIC_OPTIONS: Array<{ key: Metric; label: string }> = [
+    { key: 'likes', label: 'Post Likes' },
+    { key: 'connections', label: 'Connections' },
+    { key: 'applied', label: 'Jobs Applied' },
+    { key: 'events', label: 'Events Attended' },
+  ];
+  const metricLabel = METRIC_OPTIONS.reduce((acc, m) => { acc[m.key] = m.label; return acc; }, {} as Record<Metric, string>);
+  const selectedTotal = useMemo(() => {
+    switch (metric) {
+      case 'likes': return analytics.postLikes7d || 0;
+      case 'connections': return Number(analytics.connections7d || 0);
+      case 'applied': return Number(analytics.applied7d || 0);
+      case 'events': return Number(analytics.events7d || 0);
+      default: return 0;
+    }
+  }, [metric, analytics.postLikes7d, analytics.connections7d, analytics.applied7d, analytics.events7d]);
+  // Selected metric 7-day series in Mon..Sun order for charting
+  const selectedSeries = useMemo(() => {
+    const map: Record<string, number> = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
+    if (metric === 'likes') {
+      likeLabels.forEach((lbl, i) => {
+        const key = (lbl || '').slice(0, 3);
+        if (key in map) map[key] += Number(likesData[i] || 0);
+      });
+    } else {
+      const src = metric === 'connections' ? (analytics.connectionsDaily7d || [])
+        : metric === 'applied' ? (analytics.appliedDaily7d || [])
+        : metric === 'events' ? (analytics.eventsDaily7d || [])
+        : [];
+      const base = src.slice(-7);
+      while (base.length < 7) base.unshift(0);
+      weekdayLabels7.forEach((lbl, i) => {
+        const key = (lbl || '').slice(0, 3);
+        if (key in map) map[key] += Number(base[i] || 0);
+      });
+    }
+    return weekOrder.map((d) => map[d as keyof typeof map] || 0);
+  }, [metric, likeLabels, likesData, analytics.connectionsDaily7d, analytics.appliedDaily7d, analytics.eventsDaily7d, weekdayLabels7]);
+
+  const weekdayBars = useMemo(() => {
+    return weekOrder.map((d, idx) => ({ day: d, value: selectedSeries[idx] || 0 }));
+  }, [selectedSeries]);
   return (
     <div className="space-y-6">
 
@@ -738,52 +831,120 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
         <Card className="lg:col-span-2 rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5" /> Your Activity Analytics</CardTitle>
-            <CardDescription>See your posts analytics</CardDescription>
+            <CardDescription>See your activity analytics</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 p-5">
-            {likesData.length === 0 ? (
+            {(selectedSeries.length === 0 || selectedSeries.every(v => (v || 0) === 0)) ? (
               <div className="group p-4 rounded-xl border bg-muted/30 text-sm transition-colors hover:bg-accent/30">
-                <div className="flex items-center justify-between">
-                  <span>No data to show</span>
-                  <span className="text-xs text-muted-foreground">Hover for tips</span>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Metric:</span>
+                    <select
+                      className="h-8 rounded-md border px-2 text-xs bg-background border-yellow-500 text-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                      value={metric}
+                      onChange={(e) => setMetric(e.target.value as any)}
+                    >
+                      {METRIC_OPTIONS.map(opt => (
+                        <option key={opt.key} value={opt.key}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="text-xs text-muted-foreground">Total: {selectedTotal}</div>
                 </div>
-                <div className="mt-2 text-muted-foreground">Post Likes (last 7 days)</div>
+                <div className="mt-2 text-muted-foreground">{metricLabel[metric]} (last 7 days)</div>
                 <div className="mt-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-                  <div>No likes in the last 7 days yet. Share something with your network to get the conversation going.</div>
+                  <div>No data to show for {metricLabel[metric]} yet. Complete related actions to see trends.</div>
                   <div className="mt-3 flex gap-2">
-                    <Button size="sm" onClick={() => onNavigate('community')}>Create Post</Button>
-                    <Button size="sm" variant="outline" onClick={() => onNavigate('community')}>Browse Feed</Button>
+                    {metric === 'likes' && (<><Button size="sm" onClick={() => onNavigate('community')}>Create Post</Button><Button size="sm" variant="outline" onClick={() => onNavigate('community')}>Browse Feed</Button></>)}
+                    {metric === 'connections' && (<><Button size="sm" onClick={() => onNavigate('directory')}>Find Alumni</Button></>)}
+                    {metric === 'applied' && (<><Button size="sm" onClick={() => onNavigate('careers')}>Explore Jobs</Button></>)}
+                    {metric === 'events' && (<><Button size="sm" onClick={() => onNavigate('events')}>Browse Events</Button></>)}
                   </div>
                 </div>
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Post Likes (last 7 days)</span>
-                  <span className="text-muted-foreground">Total: {analytics.postLikes7d}</span>
+                <div className="flex items-center justify-between text-sm gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Metric:</span>
+                    <select
+                      className="h-8 rounded-md border px-2 text-xs bg-background"
+                      value={metric}
+                      onChange={(e) => setMetric(e.target.value as any)}
+                    >
+                      <option value="likes">Post Likes</option>
+                      <option value="connections">Connections</option>
+                      <option value="applied">Jobs Applied</option>
+                      <option value="events">Events Attended</option>
+                    </select>
+                  </div>
+                  <span className="text-muted-foreground">Total: {selectedTotal}</span>
                 </div>
                 <div className="relative w-full">
-                  <svg viewBox={`0 0 ${likesChart.w} ${likesChart.h}`} className="w-full h-48">
-                    <defs>
-                      <linearGradient id="likesGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="rgb(30,58,138)" stopOpacity="0.35" />
-                        <stop offset="100%" stopColor="rgb(96,165,250)" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                    <path d={likesChart.area} fill="url(#likesGrad)" />
-                    <path d={likesChart.path} fill="none" stroke="rgb(30,58,138)" strokeWidth="2" />
-                    {likesChart.pts.map(([x,y], i) => (
-                      <circle key={i} cx={x} cy={y} r="3" fill="rgb(30,58,138)" />
-                    ))}
-                    {likesChart.pts.map(([x], i) => (
-                      <text key={`t-${i}`} x={x} y={likesChart.h - likesChart.p + 14} textAnchor="middle" fontSize="10" fill="#6b7280">
-                        {likeLabels[i]}
-                      </text>
-                    ))}
-                    <text x={likesChart.w - likesChart.p} y={likesChart.p - 6} textAnchor="end" fontSize="10" fill="#6b7280">
-                      Peak {Math.max(1, ...likesData)}
-                    </text>
-                  </svg>
+                  {(() => {
+                    const w = 700; const h = 260; const p = 36; // bottom padding for x labels
+                    const leftPad = 36; // left padding for y ticks
+                    const barGap = 10; const barW = (w - leftPad - 12 - barGap * (weekdayBars.length - 1)) / weekdayBars.length;
+                    const ticks = [0,5,10,15,20];
+                    const maxData = Math.max(1, ...weekdayBars.map(b => b.value));
+                    const maxV = Math.max(20, Math.ceil(maxData / 5) * 5);
+                    const toY = (v: number) => (h - p) - (v / maxV) * (h - p - 12);
+                    return (
+                      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-56">
+                        {/* Y-axis grid and ticks */}
+                        {ticks.map((val) => {
+                          const y = toY(val);
+                          return (
+                            <g key={val}>
+                              <line x1={leftPad} x2={w - 12} y1={y} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+                              <text x={leftPad - 6} y={y + 3} textAnchor="end" fontSize="10" fill="#6b7280">
+                                {val}
+                              </text>
+                            </g>
+                          );
+                        })}
+                        {/* Bars and X labels with animation and tooltip */}
+                        {weekdayBars.map((b, i) => {
+                          const x = leftPad + i * (barW + barGap);
+                          const yTop = toY(b.value);
+                          const fullH = (h - p) - yTop;
+                          const animH = chartAnim ? fullH : 0;
+                          const animY = chartAnim ? yTop : (h - p);
+                          const isHover = hoverIdx === i;
+                          return (
+                            <g key={b.day} onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)}>
+                              <rect
+                                x={x}
+                                y={animY}
+                                width={barW}
+                                height={Math.max(0, animH)}
+                                rx={6}
+                                fill={metricColors[metric]}
+                                opacity={isHover ? 1 : 0.9}
+                                stroke={isHover ? '#111827' : 'none'}
+                                strokeWidth={isHover ? 1 : 0}
+                              >
+                                <animate attributeName="y" from={h - p} to={yTop} dur="400ms" fill="freeze" begin={chartAnim ? `${i * 50}ms` : 'indefinite'} />
+                                <animate attributeName="height" from={0} to={Math.max(0, fullH)} dur="400ms" fill="freeze" begin={chartAnim ? `${i * 50}ms` : 'indefinite'} />
+                              </rect>
+                              <text x={x + barW / 2} y={h - p + 14} textAnchor="middle" fontSize="11" fill="#374151">
+                                {b.day}
+                              </text>
+                              <text x={x + barW / 2} y={yTop - 4} textAnchor="middle" fontSize="10" fill="#6b7280">
+                                {b.value}
+                              </text>
+                              {isHover && (
+                                <g>
+                                  <rect x={x + barW / 2 - 22} y={yTop - 28} rx={4} width={44} height={18} fill="#111827" opacity={0.9} />
+                                  <text x={x + barW / 2} y={yTop - 16} textAnchor="middle" fontSize="10" fill="#ffffff">{b.value}</text>
+                                </g>
+                              )}
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -888,13 +1049,15 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                     </span>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  className="transition-transform hover:scale-[1.03] text-[#0b1b3a] bg-yellow-500 hover:bg-yellow-400 border-0"
-                  onClick={() => toast.success(`Spot reserved for ${event.title}`)}
-                >
-                  RSVP
-                </Button>
+                <div className="w-32 flex justify-end">
+                  <Button
+                    size="sm"
+                    className="transition-transform hover:scale-[1.03] text-[#0b1b3a] bg-yellow-500 hover:bg-yellow-400 border-0"
+                    onClick={() => toast.success(`Spot reserved for ${event.title}`)}
+                  >
+                    RSVP
+                  </Button>
+                </div>
               </div>
             ))}
             <Button
@@ -932,11 +1095,8 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                       Posted by {job.postedBy}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {job.applicants} applicants
-                  </p>
                 </div>
-                <div className="space-y-2">
+                <div className="w-32 flex justify-end gap-2">
                   {user?.role === 'alumni' ? (
                     <Button
                       size="sm"
