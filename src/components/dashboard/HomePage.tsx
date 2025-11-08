@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { db } from "@/lib/firebase";
 import { collection, collectionGroup, deleteDoc, doc, getDoc, onSnapshot, setDoc, updateDoc, query, where, limit } from "firebase/firestore";
-import { Users, Calendar, Briefcase, Heart, Star, Eye, ThumbsUp, Target, BarChart3, Sparkles, Flame, Trophy, Bolt, BadgeCheck, FileText } from "lucide-react";
+import { Users, Calendar, Briefcase, Heart, Star, Eye, ThumbsUp, Target, BarChart3, Sparkles, Flame, Trophy, Bolt, BadgeCheck, FileText, LogIn, Send, MessageSquare, Rocket, Megaphone, Mic2, Link as LinkIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,9 +52,11 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   const [applyCount, setApplyCount] = useState<number>(0);
   const [mentorshipCount, setMentorshipCount] = useState<number>(0);
   const [earnedBadges, setEarnedBadges] = useState<string[]>([]);
+  const [badgesLoaded, setBadgesLoaded] = useState(false);
   const [profileComplete, setProfileComplete] = useState<boolean>(false);
   const [hasPost, setHasPost] = useState<boolean>(false);
   const [hasLiked, setHasLiked] = useState<boolean>(false);
+  const [showProfilePrompt, setShowProfilePrompt] = useState(false);
 
   const getNewBadges = (kind: 'connect'|'apply'|'request'|'host', count: number, current: string[]) => {
     const newOnes: string[] = [];
@@ -125,6 +127,30 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
 
   useEffect(() => {
     if (!user?.id) return;
+    const aliasMap: Record<string, string> = {
+      'connect level 1': 'First Connection',
+      'loable': 'Network Builder',
+      'mentor seeker lv1': 'Requested Mentorship',
+      'community favorite': 'Community Helper',
+    };
+    const catalogKeys = [
+      'Login','Profile Complete','First Post','First Like','First Connection','First Message','Community Helper','Rising Star','Networking Expert',
+      'Attended Event','Mentorship Requested','Applied for Job','Applicant Lv1','Applicant Master','Applicant Pro','Career Climber',
+      'Event Leader','Event Goer','7-Day Active','Verified Alumni','Legacy Member','Mentor','Super Mentor','Network Builder','First Job','Manager','Founder','Employer Referral','Event Speaker'
+    ].map(k => k.toLowerCase());
+    const toCanonical = (raw: string): string => {
+      const lc = raw.toLowerCase();
+      const aliased = aliasMap[lc] || raw;
+      const lc2 = aliased.toLowerCase();
+      // if it's one of our known keys (case-insensitive), return the properly cased label from list; else return aliased raw
+      const idx = catalogKeys.indexOf(lc2);
+      if (idx >= 0) return [
+        'Login','Profile Complete','First Post','First Like','First Connection','First Message','Community Helper','Rising Star','Networking Expert',
+        'Attended Event','Mentorship Requested','Applied for Job','Applicant Lv1','Applicant Master','Applicant Pro','Career Climber',
+        'Event Leader','Event Goer','7-Day Active','Verified Alumni','Legacy Member','Mentor','Super Mentor','Network Builder','First Job','Manager','Founder','Employer Referral','Event Speaker'
+      ][idx];
+      return aliased;
+    };
     const unsub = onSnapshot(doc(db, 'users', user.id, 'gamification', 'summary'), (snap) => {
       const d = snap.data() as any;
       if (!d) return;
@@ -132,7 +158,11 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
       if (typeof d.connectCount === 'number') setConnectCount(d.connectCount);
       if (typeof d.applyCount === 'number') setApplyCount(d.applyCount);
       if (typeof d.mentorshipCount === 'number') setMentorshipCount(d.mentorshipCount);
-      if (Array.isArray(d.earnedBadges)) setEarnedBadges(d.earnedBadges);
+      if (Array.isArray(d.earnedBadges)) {
+        const normalized: string[] = Array.from(new Set<string>(d.earnedBadges.map((x: any) => toCanonical(String(x)))));
+        setEarnedBadges(normalized);
+        setBadgesLoaded(true);
+      }
     });
     return () => unsub();
   }, [user?.id]);
@@ -140,23 +170,25 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   // Core badge sources: First Post and First Like
   useEffect(() => {
     if (!user?.id) return;
+    if (!badgesLoaded) return; // wait until server badges have loaded to avoid clobbering
     const q1 = query(collection(db, 'posts'), where('authorId', '==', user.id), limit(1));
     const unsub1 = onSnapshot(q1, (snap) => setHasPost(!snap.empty));
     const q2 = query(collection(db, 'posts'), where('likes', 'array-contains', user.id), limit(1));
     const unsub2 = onSnapshot(q2, (snap) => setHasLiked(!snap.empty));
     return () => { unsub1(); unsub2(); };
-  }, [user?.id]);
+  }, [user?.id, badgesLoaded]);
 
   // Ensure core badges are persisted (Login always; plus Profile Complete, First Post, First Like)
   useEffect(() => {
     if (!user?.id) return;
+    if (!badgesLoaded) return; // ensure we have server state first
     const core = ['Login', ...(profileComplete ? ['Profile Complete'] : []), ...(hasPost ? ['First Post'] : []), ...(hasLiked ? ['First Like'] : [])];
     const merged = Array.from(new Set([...(earnedBadges || []), ...core]));
     if (merged.length !== earnedBadges.length) {
       setEarnedBadges(merged);
       persistGamification({ earnedBadges: merged });
     }
-  }, [user?.id, profileComplete, hasPost, hasLiked]);
+  }, [user?.id, badgesLoaded, profileComplete, hasPost, hasLiked]);
 
   // Profile completeness (from profiles/{id}); falls back to heuristic if field missing
   useEffect(() => {
@@ -170,6 +202,18 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     });
     return () => unsub();
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (user?.role !== 'student') return;
+    if (profileComplete) { setShowProfilePrompt(false); return; }
+    try {
+      const dismissed = localStorage.getItem('student_profile_prompt_dismissed');
+      setShowProfilePrompt(dismissed !== '1');
+    } catch {
+      setShowProfilePrompt(true);
+    }
+  }, [user?.id, user?.role, profileComplete]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -353,6 +397,36 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   return (
     <div className="space-y-6">
 
+      {user?.role === 'student' && !profileComplete && showProfilePrompt && (
+        <Card className="border-2 border-amber-300/50 bg-amber-50/60 dark:bg-amber-900/10">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <div>
+              <CardTitle>Complete your profile</CardTitle>
+              <CardDescription>Set up your profile to get personalized recommendations.</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setShowProfilePrompt(false);
+                  try { localStorage.setItem('student_profile_prompt_dismissed', '1'); } catch {}
+                }}
+              >
+                Dismiss
+              </Button>
+              <Button
+                size="sm"
+                className="bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]"
+                onClick={() => onNavigate('profile')}
+              >
+                Set profile
+              </Button>
+            </div>
+          </CardHeader>
+        </Card>
+      )}
+
       {/* Hero Welcome */}
       <Card className="overflow-hidden rounded-3xl shadow-strong border-0 bg-gradient-to-br from-[#0b1b3a] to-[#1d4ed8]">
         <div className="grid grid-cols-1 lg:grid-cols-3">
@@ -444,16 +518,6 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 </div>
               ))}
             </div>
-            {earnedBadges.length > 0 && (
-              <div className="pt-2 border-t mt-2">
-                <div className="text-xs text-muted-foreground mb-2">Badges earned</div>
-                <div className="flex flex-wrap gap-2">
-                  {earnedBadges.map((b) => (
-                    <Badge key={b} variant="outline" className="text-xs">{b}</Badge>
-                  ))}
-                </div>
-              </div>
-            )}
             <Button className="w-full bg-[#1e3a8a] text-white hover:bg-[#60a5fa]">Start Mission</Button>
           </CardContent>
         </Card>
@@ -610,56 +674,55 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
             <CardDescription>Your achievements</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 p-5">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {/* Login */}
-              <div className="flex flex-col items-center">
-                <div className="relative h-16 w-16 rounded-full bg-gradient-to-br from-[#1e3a8a]/15 to-[#60a5fa]/20 flex items-center justify-center ring-1 ring-[#1e3a8a]/20">
-                  <Trophy className="h-6 w-6 text-[#1e3a8a]" />
+            {(() => {
+              const catalog: Array<{ key: string; label: string; Icon: any; color: string }> = [
+                { key: 'Login', label: 'Login', Icon: LogIn, color: 'bg-yellow-400 text-yellow-900' },
+                { key: 'Profile Complete', label: 'Complete Profile', Icon: Trophy, color: 'bg-emerald-400 text-emerald-900' },
+                { key: 'First Post', label: 'First Post', Icon: FileText, color: 'bg-emerald-400 text-emerald-900' },
+                { key: 'First Like', label: 'First Like', Icon: Heart, color: 'bg-pink-400 text-pink-900' },
+                { key: 'First Connection', label: 'First Connection', Icon: Users, color: 'bg-violet-400 text-violet-900' },
+                { key: 'First Message', label: 'First Message', Icon: MessageSquare, color: 'bg-indigo-400 text-indigo-900' },
+                { key: 'Community Helper', label: 'Community Helper', Icon: Star, color: 'bg-lime-400 text-lime-900' },
+                { key: 'Rising Star', label: 'Rising Star', Icon: ThumbsUp, color: 'bg-pink-400 text-pink-900' },
+                { key: 'Attended Event', label: 'Attended Event', Icon: Calendar, color: 'bg-cyan-400 text-cyan-900' },
+                { key: 'Mentorship Requested', label: 'Requested Mentorship', Icon: Users, color: 'bg-amber-400 text-amber-900' },
+                { key: 'Applied for Job', label: 'Applied for Job', Icon: Briefcase, color: 'bg-orange-400 text-orange-900' },
+                { key: 'Event Leader', label: 'Event Leader', Icon: Megaphone, color: 'bg-purple-400 text-purple-900' },
+                { key: 'Event Goer', label: 'Event Goer', Icon: Calendar, color: 'bg-cyan-400 text-cyan-900' },
+                { key: '7-Day Active', label: '7-Day Active', Icon: Rocket, color: 'bg-red-400 text-red-900' },
+                { key: 'Verified Alumni', label: 'Verified Alumni', Icon: BadgeCheck, color: 'bg-blue-400 text-blue-900' },
+                { key: 'Network Builder', label: 'Network Builder', Icon: LinkIcon, color: 'bg-violet-400 text-violet-900' },
+              ];
+              const allEarned = (earnedBadges || []).map(k => String(k));
+              const lc = new Set(allEarned.map(k => k.toLowerCase()));
+              const list = catalog.filter(c => lc.has(c.key.toLowerCase()));
+              const matchedLC = new Set(list.map(c => c.key.toLowerCase()));
+              const remaining = allEarned.filter(k => !matchedLC.has(k.toLowerCase()));
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {(list.length + remaining.length) === 0 ? (
+                    <div className="col-span-full text-sm text-muted-foreground">No badges yet. Start your journey from the Missions above.</div>
+                  ) : list.map((b) => (
+                    <div key={b.key} className="flex flex-col items-center">
+                      <div className={`h-16 w-16 rounded-full flex items-center justify-center ${b.color}`}>
+                        <b.Icon className="h-7 w-7" />
+                      </div>
+                      <div className="mt-2 text-center text-sm font-medium truncate max-w-[120px]" title={b.label}>{b.label}</div>
+                      <div className="mt-1 px-2 py-0.5 rounded-full text-xs bg-background/70 dark:bg-white/10 text-foreground/80 ring-1 ring-border">Unlocked</div>
+                    </div>
+                  ))}
+                  {remaining.map((label) => (
+                    <div key={`gen_${label}`} className="flex flex-col items-center">
+                      <div className={`h-16 w-16 rounded-full flex items-center justify-center bg-muted text-muted-foreground`}>
+                        <Trophy className="h-7 w-7" />
+                      </div>
+                      <div className="mt-2 text-center text-sm font-medium truncate max-w-[120px]" title={label}>{label}</div>
+                      <div className="mt-1 px-2 py-0.5 rounded-full text-xs bg-background/70 dark:bg-white/10 text-foreground/80 ring-1 ring-border">Unlocked</div>
+                    </div>
+                  ))}
                 </div>
-                <div className="mt-2 text-center text-sm font-medium">Login</div>
-                <div className="mt-1 px-2 py-0.5 rounded-full text-xs bg-background/70 dark:bg-white/10 text-foreground/80 ring-1 ring-border">Unlocked</div>
-              </div>
-              {/* Profile Complete */}
-              {profileComplete && (
-                <div className="flex flex-col items-center">
-                  <div className="relative h-16 w-16 rounded-full bg-gradient-to-br from-blue-200 to-blue-100 flex items-center justify-center ring-1 ring-blue-300/50">
-                    <BadgeCheck className="h-6 w-6 text-blue-700" />
-                  </div>
-                  <div className="mt-2 text-center text-sm font-medium">Profile Complete</div>
-                  <div className="mt-1 px-2 py-0.5 rounded-full text-xs bg-background/70 dark:bg-white/10 text-foreground/80 ring-1 ring-border">Unlocked</div>
-                </div>
-              )}
-              {/* First Post */}
-              {hasPost && (
-                <div className="flex flex-col items-center">
-                  <div className="relative h-16 w-16 rounded-full bg-gradient-to-br from-emerald-200 to-emerald-100 flex items-center justify-center ring-1 ring-emerald-300/50">
-                    <FileText className="h-6 w-6 text-emerald-700" />
-                  </div>
-                  <div className="mt-2 text-center text-sm font-medium">First Post</div>
-                  <div className="mt-1 px-2 py-0.5 rounded-full text-xs bg-background/70 dark:bg-white/10 text-foreground/80 ring-1 ring-border">Unlocked</div>
-                </div>
-              )}
-              {/* First Like */}
-              {hasLiked && (
-                <div className="flex flex-col items-center">
-                  <div className="relative h-16 w-16 rounded-full bg-gradient-to-br from-rose-200 to-rose-100 flex items-center justify-center ring-1 ring-rose-300/50">
-                    <Heart className="h-6 w-6 text-rose-600" />
-                  </div>
-                  <div className="mt-2 text-center text-sm font-medium">First Like</div>
-                  <div className="mt-1 px-2 py-0.5 rounded-full text-xs bg-background/70 dark:bg-white/10 text-foreground/80 ring-1 ring-border">Unlocked</div>
-                </div>
-              )}
-              {/* Earned badges */}
-              {earnedBadges.filter(b => !['Login','Profile Complete','First Post','First Like'].includes(b)).map((b) => (
-                <div key={b} className="flex flex-col items-center">
-                  <div className="relative h-16 w-16 rounded-full bg-gradient-to-br from-violet-200 to-fuchsia-100 flex items-center justify-center ring-1 ring-violet-300/50">
-                    <span className="text-xl">🏅</span>
-                  </div>
-                  <div className="mt-2 text-center text-sm font-medium truncate max-w-[120px]" title={b}>{b}</div>
-                  <div className="mt-1 px-2 py-0.5 rounded-full text-xs bg-background/70 dark:bg-white/10 text-foreground/80 ring-1 ring-border">Unlocked</div>
-                </div>
-              ))}
-            </div>
+              );
+            })()}
             <div className="rounded-xl border bg-muted/30 p-3">
               <div className="text-xs text-muted-foreground mb-2">Earn more</div>
               <div className="flex flex-wrap gap-2">

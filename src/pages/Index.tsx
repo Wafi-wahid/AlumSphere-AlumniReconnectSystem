@@ -13,6 +13,7 @@ import { FameHub } from "@/components/fame/FameHub";
 import Profile from "@/pages/Profile";
 import { useAuth } from "@/store/auth";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
+import { BrandLoader } from "@/components/ui/BrandLoader";
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -85,7 +86,11 @@ const Index = () => {
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-muted-foreground">Loading...</div>;
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[linear-gradient(to_bottom,#0b1b3a,#1e3a8a)]">
+      <BrandLoader label="Loading..." />
+    </div>
+  );
   if (!user) return <LoginPage />;
 
   return (
