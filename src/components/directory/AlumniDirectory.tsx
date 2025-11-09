@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { db } from "@/lib/firebase";
+import { api } from "@/lib/api";
 import { collection, onSnapshot, query, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import { useAuth } from "@/store/auth";
@@ -41,6 +42,98 @@ export function AlumniDirectory() {
     requestAnimationFrame(() => {
       searchSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
+  };
+
+  // Mirror Mongo users (system-registered) into Firestore 'users'
+  const mapMongoToFirestoreUser = (u: any) => {
+    const skillsArray = String(u.skills || "")
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+    const id = String(u._id || u.id || "");
+    const role = u.role || "alumni";
+    const graduationYear = u.gradYear ?? u.batchYear ?? "";
+    const department = u.program || "";
+    const title = u.profileHeadline || "";
+    const company = u.currentCompany || "";
+    const avatar = u.profilePicture || "";
+    const location = u.location || "";
+    const linkedinUrl = u.linkedinId || "";
+    const experienceYears = Number(u.experienceYears || 0);
+
+    // Safe snapshot of original Mongo fields (exclude passwordHash and other secrets)
+    const mongo = {
+      _id: id,
+      name: u.name || "",
+      email: u.email || "",
+      role,
+      gradSeason: u.gradSeason || u.batchSeason || "",
+      gradYear: u.gradYear || "",
+      batchSeason: u.batchSeason || "",
+      batchYear: u.batchYear || "",
+      linkedinId: u.linkedinId || "",
+      profileCompleted: !!u.profileCompleted,
+      mentorEligible: !!u.mentorEligible,
+      createdAt: u.createdAt || "",
+      updatedAt: u.updatedAt || "",
+      experienceYears,
+      location,
+      profileHeadline: u.profileHeadline || "",
+      program: u.program || "",
+      skills: skillsArray,
+      profilePicture: avatar,
+      currentCompany: company,
+    };
+
+    return {
+      id,
+      name: u.name || "Unnamed",
+      email: u.email || "",
+      role,
+      roleCategory: role === 'student' ? 'student' : 'alumni',
+      isCurrentStudent: role === 'student',
+      // Display fields used by UI
+      title,
+      company,
+      graduationYear,
+      department,
+      location,
+      skills: skillsArray,
+      avatar,
+      photoURL: avatar,
+      linkedinUrl,
+      experienceYears,
+      // Keep a safe copy of original fields for future use/debug
+      mongo,
+      // Source marker (optional)
+      source: 'user',
+    };
+  };
+
+  const syncSystemUsers = async () => {
+    try {
+      const auth = getAuth();
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+      // Expect backend endpoint to return { users: [...] }
+      const res = await api<{ users: any[] }>("/admin/users");
+      const users = Array.isArray(res?.users) ? res.users : [];
+      let count = 0;
+      let alumniCount = 0;
+      let studentCount = 0;
+      for (const u of users) {
+        const mapped = mapMongoToFirestoreUser(u);
+        if (!mapped.id) continue;
+        await setDoc(doc(db, 'users', mapped.id), mapped, { merge: true });
+        count++;
+        if (mapped.roleCategory === 'alumni') alumniCount++;
+        if (mapped.roleCategory === 'student') studentCount++;
+      }
+      toast.success(`Synced ${count} users • Alumni: ${alumniCount} • Students: ${studentCount}`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to sync users');
+    }
   };
 
   const profilesToSeed: Array<{
@@ -199,59 +292,90 @@ export function AlumniDirectory() {
         map[d.id] = d.data();
       });
       setProfiles(map);
+
     });
     return () => unsubProfiles();
   }, []);
 
   const items = useMemo(() => {
+    const pick = (...vals: any[]) => vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
+    const ensureSkills = (val: any) => Array.isArray(val)
+      ? val
+      : String(val || "").split(",").map((s) => s.trim()).filter(Boolean);
+
     const all = (people.length ? people : []).map((u: any) => {
       const p = profiles[u.id] || {};
+      const mongo = u.mongo || {};
+      const name = pick(p.name, u.name, u.fullName, mongo.name, "Unnamed");
+      const avatar = pick(p.avatar, p.photoURL, u.avatar, u.photoURL, u.avatarUrl, u.profilePicture, mongo.profilePicture, "");
+      const company = pick(p.company, u.company, u.employer, u.currentCompany, mongo.currentCompany, mongo.company, "");
+      const title = pick(p.role, p.title, u.title, u.roleTitle, u.profileHeadline, mongo.profileHeadline, u.role, "");
+      const graduationYear = pick(p.graduationYear, u.graduationYear, u.gradYear, mongo.gradYear, u.batchYear, mongo.batchYear, "");
+      const department = pick(p.department, u.department, u.dept, u.program, mongo.program, "");
+      const location = pick(p.location, p.city, u.location, u.city, mongo.location, "");
+      const skills = Array.isArray(p.skills) ? p.skills : ensureSkills(pick(u.skills, mongo.skills, []));
+      const linkedinUrl = pick(p.linkedinUrl, u.linkedinUrl, mongo.linkedinId, "");
+      const rawRole = String(p.rawRole || u.rawRole || u.role || mongo.role || '').toLowerCase();
+      const isStudent = rawRole === 'student';
       return {
         id: u.id,
-        name: p.name || u.name || u.fullName || "Unnamed",
-        avatar: p.avatar || p.photoURL || u.avatar || u.photoURL || "",
-        company: p.company || u.company || u.employer || "",
-        role: p.role || p.title || u.title || u.roleTitle || u.role || "",
-        headline: p.headline || u.profileHeadline || u.headline || "",
-        graduationYear: p.graduationYear || u.graduationYear || u.gradYear || "",
-        department: p.department || u.department || u.dept || "",
-        location: p.location || p.city || u.location || u.city || "",
-        skills: Array.isArray(p.skills) ? p.skills : (Array.isArray(u.skills) ? u.skills : []),
+        name,
+        avatar,
+        company,
+        role: title,
+        rawRole,
+        headline: pick(p.headline, u.headline, u.profileHeadline, mongo.profileHeadline, ""),
+        graduationYear,
+        department,
+        location,
+        skills,
         mentorAvailable: p.mentorAvailable ?? !!u.mentorAvailable,
         linkedinSynced: p.linkedinSynced ?? !!u.linkedinSynced,
-        linkedinUrl: p.linkedinUrl || u.linkedinUrl || "",
+        linkedinUrl,
         rating: p.rating ?? (u.rating || 0),
         mentoringSessions: p.mentoringSessions ?? (u.mentoringSessions || 0),
-        isCurrentStudent: (p.isCurrentStudent ?? u.isCurrentStudent) ? true : (u.role === 'student'),
-        roleCategory: (p.role === 'student' || p.isCurrentStudent || u.role === 'student' || u.isCurrentStudent) ? 'student' : 'alumni',
-        visible: p.visible,
-        source: 'user' as const,
+        source: 'user',
+        isCurrentStudent: u.isCurrentStudent || isStudent,
+        roleCategory: isStudent ? 'student' : 'alumni',
+        visible: p.visible ?? u.visible ?? true,
       };
     });
     const peopleIds = new Set((people || []).map((u: any) => u.id));
     const extraProfiles = Object.entries(profiles || {})
       .filter(([pid]) => !peopleIds.has(pid))
-      .map(([pid, p]: any) => ({
-        id: pid,
-        name: p.name || "Unnamed",
-        avatar: p.avatar || p.photoURL || "",
-        company: p.company || "",
-        role: p.role || p.title || "",
-        headline: p.headline || "",
-        graduationYear: p.graduationYear || "",
-        department: p.department || "",
-        location: p.location || p.city || "",
-        skills: Array.isArray(p.skills) ? p.skills : [],
-        mentorAvailable: !!p.mentorAvailable,
-        linkedinSynced: !!p.linkedinSynced,
-        linkedinUrl: p.linkedinUrl || "",
-        rating: p.rating || 0,
-        mentoringSessions: p.mentoringSessions || 0,
-        isCurrentStudent: !!p.isCurrentStudent,
-        roleCategory: (p.role === 'student' || p.isCurrentStudent) ? 'student' : 'alumni',
-        visible: p.visible,
-        source: 'profile' as const,
-      }));
+      .map(([pid, p]: any) => {
+        const name = pick(p.name, p.fullName, "Unnamed");
+        const avatar = pick(p.avatar, p.photoURL, p.avatarUrl, p.profilePicture, "");
+        const company = pick(p.company, p.employer, p.currentCompany, "");
+        const title = pick(p.role, p.title, p.headline, "");
+        const graduationYear = pick(p.graduationYear, p.gradYear, p.batchYear, "");
+        const department = pick(p.department, p.program, p.dept, "");
+        const location = pick(p.location, p.city, "");
+        const skills = Array.isArray(p.skills) ? p.skills : ensureSkills(p.skills);
+        const rawRole = String(p.role || '').toLowerCase();
+        return {
+          id: pid,
+          name,
+          avatar,
+          company,
+          role: title,
+          rawRole,
+          headline: pick(p.headline, ""),
+          graduationYear,
+          department,
+          location,
+          skills,
+          mentorAvailable: !!p.mentorAvailable,
+          linkedinSynced: !!p.linkedinSynced,
+          linkedinUrl: pick(p.linkedinUrl, p.linkedin, ""),
+          rating: p.rating || 0,
+          mentoringSessions: p.mentoringSessions || 0,
+          source: 'profile',
+          isCurrentStudent: false,
+          roleCategory: 'alumni',
+          visible: p.visible ?? true,
+        };
+      });
     const mockMapped = mockAlumni.map((m: any) => ({
       id: `mock-${m.id}`,
       name: m.name,
@@ -276,6 +400,8 @@ export function AlumniDirectory() {
   const filteredAlumni = items.filter((alumni: any) => {
     const isVisible = alumni.visible !== false; // default to visible when undefined
     if (!isVisible) return false;
+    const rr = String(alumni.rawRole || '').toLowerCase();
+    if (rr === 'admin' || rr === 'super_admin' || rr === 'super admin' || rr.includes('admin')) return false;
     const matchAudience = audience === 'alumni'
       ? (alumni.roleCategory === 'alumni' && (alumni.source === 'user' || alumni.source === 'profile'))
       : ((alumni.isCurrentStudent || alumni.roleCategory === 'student') && alumni.source === 'user');
@@ -411,6 +537,12 @@ export function AlumniDirectory() {
               Filters
             </Button>
           </div>
+
+          {(user?.role === 'admin' || user?.role === 'super_admin') && (
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={syncSystemUsers}>Sync System Users</Button>
+            </div>
+          )}
 
           {showAdvanced && (
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 pt-2">
