@@ -153,9 +153,7 @@ export function AlumniDirectory() {
     },
   ]), []);
 
-  // Temporary: show only the profiles in this current seed batch
-  const showOnlyCurrentSeed = true;
-  const currentSeedIds = useMemo(() => new Set(profilesToSeed.map(p => p.id)), [profilesToSeed]);
+  // Gate removed: show all items (system users + profiles)
 
   const seedProfiles = async () => {
     try {
@@ -272,10 +270,6 @@ export function AlumniDirectory() {
       roleCategory: 'alumni',
     }));
     const combined = [...all, ...extraProfiles, ...mockMapped];
-    if (showOnlyCurrentSeed) {
-      // Only include the currently seeded profile docs
-      return combined.filter((it: any) => it.source === 'profile' && currentSeedIds.has(it.id));
-    }
     return combined;
   }, [people, profiles]);
 
