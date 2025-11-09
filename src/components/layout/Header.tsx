@@ -301,7 +301,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
           </Button>
           
           <div className="flex items-center gap-2">
-            <img src="/logo1.png" alt="Logo" className="w-16 h-16 md:w-20 md:h-20 rounded transition-transform duration-200 hover:scale-105" />
+            <img src="/logo1.png" alt="Logo" className="h-10 w-auto md:h-14 max-h-16 rounded transition-transform duration-200 hover:scale-105 object-contain" />
           </div>
         </div>
 
@@ -460,16 +460,16 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
             {/* User Profile */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2 h-auto p-2">
-                  <Avatar className="h-8 w-8">
+                <Button variant="default" className="flex items-center gap-2 h-auto p-2 text-black border-2 border-yellow-400 bg-white hover:bg-yellow-50">
+                  <Avatar className="h-8 w-8 ring-2 ring-yellow-400 ring-offset-2 ring-offset-background">
                     <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
                     <AvatarFallback>
                       {currentUser.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="hidden md:block text-left">
-                    <p className="text-sm font-medium">{currentUser.name}</p>
-                    <p className="text-xs text-muted-foreground">{currentUser.role}</p>
+                    <p className="text-sm font-medium text-black">{currentUser.name}</p>
+                    <p className="text-xs text-black">{currentUser.role}</p>
                   </div>
                 </Button>
               </DropdownMenuTrigger>

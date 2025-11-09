@@ -1,211 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
-import { Search, Filter, MapPin, Briefcase, GraduationCap, MessageCircle, Heart, Star } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, Filter, MapPin, Briefcase, GraduationCap, MessageCircle, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { db } from "@/lib/firebase";
+import { api } from "@/lib/api";
 import { collection, onSnapshot, query, doc, setDoc, deleteDoc } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { getAuth, signInAnonymously } from "firebase/auth";
 import { useAuth } from "@/store/auth";
 import { toast } from "sonner";
 
-const mockAlumni = [
-  {
-    id: 1,
-    name: "Sarah Johnson",
-    avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b47c?w=150&h=150&fit=crop&crop=face",
-    company: "Google",
-    role: "Senior Software Engineer",
-    graduationYear: 2018,
-    department: "Computer Science",
-    location: "Mountain View, CA",
-    skills: ["React", "Python", "Machine Learning", "System Design"],
-    mentorAvailable: true,
-    linkedinSynced: true,
-    rating: 4.9,
-    mentoringSessions: 23,
-    bio: "Passionate about mentoring the next generation of engineers. Specialized in ML and distributed systems."
-  },
-  {
-    id: 2,
-    name: "Michael Chen",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face",
-    company: "Microsoft",
-    role: "Product Manager",
-    graduationYear: 2019,
-    department: "Business",
-    location: "Seattle, WA",
-    skills: ["Product Strategy", "Leadership", "Analytics", "UX Design"],
-    mentorAvailable: true,
-    linkedinSynced: true,
-    rating: 4.8,
-    mentoringSessions: 17,
-    bio: "Helping students transition from technical roles to product management."
-  },
-  {
-    id: 3,
-    name: "Emily Davis",
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face",
-    company: "Tesla",
-    role: "Engineering Manager",
-    graduationYear: 2016,
-    department: "Electrical Engineering",
-    location: "Austin, TX",
-    skills: ["Leadership", "Hardware", "Renewable Energy", "Team Management"],
-    mentorAvailable: false,
-    linkedinSynced: true,
-    rating: 4.7,
-    mentoringSessions: 31,
-    bio: "Leading innovation in sustainable energy and electric vehicles."
-  },
-  {
-    id: 4,
-    name: "David Wilson",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
-    company: "Amazon",
-    role: "Solutions Architect",
-    graduationYear: 2017,
-    department: "Computer Science",
-    location: "San Francisco, CA",
-    skills: ["Cloud Architecture", "DevOps", "System Design", "AWS"],
-    mentorAvailable: true,
-    linkedinSynced: false,
-    rating: 4.6,
-    mentoringSessions: 12,
-    bio: "AWS expert helping companies scale their cloud infrastructure."
-  },
-  {
-    id: 5,
-    name: "Jessica Martinez",
-    avatar: "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=150&h=150&fit=crop&crop=face",
-    company: "Meta",
-    role: "UX Designer",
-    graduationYear: 2020,
-    department: "Design",
-    location: "Menlo Park, CA",
-    skills: ["UI/UX Design", "Figma", "User Research", "Prototyping"],
-    mentorAvailable: true,
-    linkedinSynced: true,
-    rating: 4.9,
-    mentoringSessions: 15,
-    bio: "Creating delightful user experiences for billions of users worldwide."
-  },
-  {
-    id: 6,
-    name: "James Anderson",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face",
-    company: "Apple",
-    role: "iOS Developer",
-    graduationYear: 2019,
-    department: "Computer Science",
-    location: "Cupertino, CA",
-    skills: ["Swift", "iOS Development", "Mobile Apps", "SwiftUI"],
-    mentorAvailable: true,
-    linkedinSynced: true,
-    rating: 4.7,
-    mentoringSessions: 19,
-    bio: "Building beautiful iOS applications and mentoring aspiring mobile developers."
-  },
-  {
-    id: 7,
-    name: "Rachel Kim",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop&crop=face",
-    company: "Netflix",
-    role: "Data Scientist",
-    graduationYear: 2018,
-    department: "Data Science",
-    location: "Los Angeles, CA",
-    skills: ["Python", "Machine Learning", "Data Analysis", "SQL"],
-    mentorAvailable: true,
-    linkedinSynced: true,
-    rating: 4.8,
-    mentoringSessions: 21,
-    bio: "Leveraging data to improve content recommendations and user engagement."
-  },
-  {
-    id: 8,
-    name: "Robert Taylor",
-    avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&h=150&fit=crop&crop=face",
-    company: "Stripe",
-    role: "Backend Engineer",
-    graduationYear: 2017,
-    department: "Computer Science",
-    location: "San Francisco, CA",
-    skills: ["Node.js", "Microservices", "API Design", "PostgreSQL"],
-    mentorAvailable: false,
-    linkedinSynced: true,
-    rating: 4.5,
-    mentoringSessions: 8,
-    bio: "Building scalable payment infrastructure for internet businesses."
-  },
-  {
-    id: 9,
-    name: "Linda Garcia",
-    avatar: "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=150&h=150&fit=crop&crop=face",
-    company: "Adobe",
-    role: "Marketing Manager",
-    graduationYear: 2020,
-    department: "Marketing",
-    location: "San Jose, CA",
-    skills: ["Digital Marketing", "SEO", "Content Strategy", "Analytics"],
-    mentorAvailable: true,
-    linkedinSynced: true,
-    rating: 4.6,
-    mentoringSessions: 14,
-    bio: "Driving growth through data-driven marketing strategies."
-  },
-  {
-    id: 10,
-    name: "Christopher Lee",
-    avatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&h=150&fit=crop&crop=face",
-    company: "Salesforce",
-    role: "Sales Engineer",
-    graduationYear: 2019,
-    department: "Business",
-    location: "San Francisco, CA",
-    skills: ["Sales", "CRM", "Technical Presentations", "Cloud Solutions"],
-    mentorAvailable: true,
-    linkedinSynced: true,
-    rating: 4.7,
-    mentoringSessions: 16,
-    bio: "Helping businesses transform with cloud technology."
-  },
-  {
-    id: 11,
-    name: "Amanda White",
-    avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&h=150&fit=crop&crop=face",
-    company: "Airbnb",
-    role: "Product Designer",
-    graduationYear: 2018,
-    department: "Design",
-    location: "San Francisco, CA",
-    skills: ["Product Design", "Design Systems", "Sketch", "User Testing"],
-    mentorAvailable: true,
-    linkedinSynced: true,
-    rating: 4.9,
-    mentoringSessions: 25,
-    bio: "Designing experiences that bring people together around the world."
-  },
-  {
-    id: 12,
-    name: "Thomas Brown",
-    avatar: "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150&h=150&fit=crop&crop=face",
-    company: "LinkedIn",
-    role: "Software Engineer",
-    graduationYear: 2021,
-    department: "Computer Science",
-    location: "Sunnyvale, CA",
-    skills: ["Java", "Spring Boot", "Distributed Systems", "Redis"],
-    mentorAvailable: true,
-    linkedinSynced: true,
-    rating: 4.5,
-    mentoringSessions: 9,
-    bio: "Building professional networking tools to connect the world's workforce."
-  }
-];
+const mockAlumni: any[] = [];
 
 export function AlumniDirectory() {
   const { user } = useAuth();
@@ -214,14 +23,245 @@ export function AlumniDirectory() {
     year: "all",
     department: "all",
     location: "all",
-    mentorAvailable: false
+    company: "",
+    skill: "",
   });
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [audience, setAudience] = useState<"alumni" | "students">("alumni");
   const [people, setPeople] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [visibleCount, setVisibleCount] = useState(24);
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
   const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set());
+  const [viewing, setViewing] = useState<any | null>(null);
+  const searchSectionRef = useRef<HTMLDivElement | null>(null);
+  const [sortBy, setSortBy] = useState<'relevance' | 'name' | 'active'>('relevance');
+
+  const handleOpenFiltersClick = () => {
+    setShowAdvanced(true);
+    requestAnimationFrame(() => {
+      searchSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  // Mirror Mongo users (system-registered) into Firestore 'users'
+  const mapMongoToFirestoreUser = (u: any) => {
+    const skillsArray = String(u.skills || "")
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+    const id = String(u._id || u.id || "");
+    const role = u.role || "alumni";
+    const graduationYear = u.gradYear ?? u.batchYear ?? "";
+    const department = u.program || "";
+    const title = u.profileHeadline || "";
+    const company = u.currentCompany || "";
+    const avatar = u.profilePicture || "";
+    const location = u.location || "";
+    const linkedinUrl = u.linkedinId || "";
+    const experienceYears = Number(u.experienceYears || 0);
+
+    // Safe snapshot of original Mongo fields (exclude passwordHash and other secrets)
+    const mongo = {
+      _id: id,
+      name: u.name || "",
+      email: u.email || "",
+      role,
+      gradSeason: u.gradSeason || u.batchSeason || "",
+      gradYear: u.gradYear || "",
+      batchSeason: u.batchSeason || "",
+      batchYear: u.batchYear || "",
+      linkedinId: u.linkedinId || "",
+      profileCompleted: !!u.profileCompleted,
+      mentorEligible: !!u.mentorEligible,
+      createdAt: u.createdAt || "",
+      updatedAt: u.updatedAt || "",
+      experienceYears,
+      location,
+      profileHeadline: u.profileHeadline || "",
+      program: u.program || "",
+      skills: skillsArray,
+      profilePicture: avatar,
+      currentCompany: company,
+    };
+
+    return {
+      id,
+      name: u.name || "Unnamed",
+      email: u.email || "",
+      role,
+      roleCategory: role === 'student' ? 'student' : 'alumni',
+      isCurrentStudent: role === 'student',
+      // Display fields used by UI
+      title,
+      company,
+      graduationYear,
+      department,
+      location,
+      skills: skillsArray,
+      avatar,
+      photoURL: avatar,
+      linkedinUrl,
+      experienceYears,
+      // Keep a safe copy of original fields for future use/debug
+      mongo,
+      // Source marker (optional)
+      source: 'user',
+    };
+  };
+
+  const syncSystemUsers = async () => {
+    try {
+      const auth = getAuth();
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+      // Expect backend endpoint to return { users: [...] }
+      const res = await api<{ users: any[] }>("/admin/users");
+      const users = Array.isArray(res?.users) ? res.users : [];
+      let count = 0;
+      let alumniCount = 0;
+      let studentCount = 0;
+      for (const u of users) {
+        const mapped = mapMongoToFirestoreUser(u);
+        if (!mapped.id) continue;
+        await setDoc(doc(db, 'users', mapped.id), mapped, { merge: true });
+        count++;
+        if (mapped.roleCategory === 'alumni') alumniCount++;
+        if (mapped.roleCategory === 'student') studentCount++;
+      }
+      toast.success(`Synced ${count} users • Alumni: ${alumniCount} • Students: ${studentCount}`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to sync users');
+    }
+  };
+
+  const profilesToSeed: Array<{
+    id: string;
+    name: string;
+    avatar?: string;
+    role?: string;
+    headline?: string;
+    company?: string;
+    gradSeason?: "Spring" | "Fall";
+    graduationYear?: number;
+    department?: string;
+    location?: string;
+    skills?: string[];
+    linkedinUrl?: string;
+    mentorAvailable?: boolean;
+    linkedinSynced?: boolean;
+    visible?: boolean;
+    isCurrentStudent?: boolean;
+  }> = useMemo(() => ([
+    {
+      id: "alumni-1",
+      name: "Syed Aliyan Abbas",
+      avatar: "/alumni/alumni1.jpg",
+      role: "Junior Software Engineer",
+      headline: "Software Engineer @CareCloud",
+      company: "CareCloud",
+      gradSeason: "Spring",
+      graduationYear: 2025,
+      department: "Software Engineering",
+      location: "Islamabad, pk",
+      skills: ["React", "TypeScript", "Next.js", "MERN stack"],
+      linkedinUrl: "https://www.linkedin.com/in/syed-aliyan-abbas-0a201a308/",
+      mentorAvailable: false,
+      linkedinSynced: true,
+      visible: true,
+      isCurrentStudent: false,
+    },
+    {
+      id: "alumni-2",
+      name: "Afia Ishaq",
+      avatar: "/alumni/alumni2.jpg",
+      role: "Team Lead",
+      headline: "Team Lead | Data Scientist | Gold Medalist | GoHighLevel Certified",
+      company: "Tao Tao Tech",
+      gradSeason: "Spring",
+      graduationYear: 2020,
+      department: "Software Engineering",
+      location: "Islamabad, pk",
+      skills: ["Marketing", "WordPress Design", "Web Development", "Machine Learning"],
+      linkedinUrl: "https://www.linkedin.com/in/afia-ishaq/",
+      mentorAvailable: false,
+      linkedinSynced: true,
+      visible: true,
+      isCurrentStudent: false,
+    },
+    {
+      id: "alumni-3",
+      name: "Anas Shoaib",
+      avatar: "/alumni/alumni3.jpg",
+      role: "Project Implementation Specialist / HRMS Expert ",
+      headline: "Associate Project Manager @ PrimeHRMS | Project Management | Support Coordinator | HRMS Domain Expert",
+      company: "PrimeHRMS",
+      gradSeason: "Spring",
+      graduationYear: 2020,
+      department: "Computer Science",
+      location: "Islamabad, pk",
+      skills: ["HR", "Software Project Management", "Web Development", "React.js", "Technical Support"],
+      linkedinUrl: "https://www.linkedin.com/in/iem-anas/",
+      mentorAvailable: false,
+      linkedinSynced: true,
+      visible: true,
+      isCurrentStudent: false,
+    },
+    {
+      id: "alumni-4",
+      name: "Abdullah Saleem ",
+      avatar: "/alumni/alumni4.jpg",
+      role: "Android Developer",
+      headline: "Android Developer | Computer Science",
+      company: "Markalytics",
+      gradSeason: "Spring",
+      graduationYear: 2024,
+      department: "Computer Science",
+      location: "Islamabad, pk",
+      skills: ["ClickUp", "Kotlin", "Python", "Data Science", "Android Development"],
+      linkedinUrl: "https://www.linkedin.com/in/abdullah-saleem-as/",
+      mentorAvailable: false,
+      linkedinSynced: true,
+      visible: true,
+      isCurrentStudent: false,
+    },
+    {
+      id: "alumni-5",
+      name: "Hannan Javaid",
+      avatar: "/alumni/alumni5.jpg",
+      role: "Chief Executive Officer",
+      headline: "Founder & CEO at NOITS | Business & Tech Consultant | SaaS, Web & Mobile Solutions | Digital Growth Leader",
+      company: "Noits",
+      gradSeason: "Spring",
+      graduationYear: 2020,
+      department: "Information Technology",
+      location: "Islamabad, pk",
+      skills: ["Web Development", "Digital Marketing", "Project Management", "Data Analysis"],
+      linkedinUrl: "https://www.linkedin.com/in/hannan-javaid5445/",
+      mentorAvailable: false,
+      linkedinSynced: true,
+      visible: true,
+      isCurrentStudent: false,
+    },
+  ]), []);
+
+  // Gate removed: show all items (system users + profiles)
+
+  const seedProfiles = async () => {
+    try {
+      const auth = getAuth();
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+      for (const p of profilesToSeed) {
+        await setDoc(doc(db, "profiles", p.id), p, { merge: true });
+      }
+      toast.success("Seeded profiles");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to seed");
+    }
+  };
 
   useEffect(() => {
     const qUsers = query(collection(db, "users"));
@@ -252,53 +292,90 @@ export function AlumniDirectory() {
         map[d.id] = d.data();
       });
       setProfiles(map);
+
     });
     return () => unsubProfiles();
   }, []);
 
   const items = useMemo(() => {
+    const pick = (...vals: any[]) => vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
+    const ensureSkills = (val: any) => Array.isArray(val)
+      ? val
+      : String(val || "").split(",").map((s) => s.trim()).filter(Boolean);
+
     const all = (people.length ? people : []).map((u: any) => {
       const p = profiles[u.id] || {};
+      const mongo = u.mongo || {};
+      const name = pick(p.name, u.name, u.fullName, mongo.name, "Unnamed");
+      const avatar = pick(p.avatar, p.photoURL, u.avatar, u.photoURL, u.avatarUrl, u.profilePicture, mongo.profilePicture, "");
+      const company = pick(p.company, u.company, u.employer, u.currentCompany, mongo.currentCompany, mongo.company, "");
+      const title = pick(p.role, p.title, u.title, u.roleTitle, u.profileHeadline, mongo.profileHeadline, u.role, "");
+      const graduationYear = pick(p.graduationYear, u.graduationYear, u.gradYear, mongo.gradYear, u.batchYear, mongo.batchYear, "");
+      const department = pick(p.department, u.department, u.dept, u.program, mongo.program, "");
+      const location = pick(p.location, p.city, u.location, u.city, mongo.location, "");
+      const skills = Array.isArray(p.skills) ? p.skills : ensureSkills(pick(u.skills, mongo.skills, []));
+      const linkedinUrl = pick(p.linkedinUrl, u.linkedinUrl, mongo.linkedinId, "");
+      const rawRole = String(p.rawRole || u.rawRole || u.role || mongo.role || '').toLowerCase();
+      const isStudent = rawRole === 'student';
       return {
         id: u.id,
-        name: p.name || u.name || u.fullName || "Unnamed",
-        avatar: p.avatar || p.photoURL || u.avatar || u.photoURL || "",
-        company: p.company || u.company || u.employer || "",
-        role: p.role || p.title || u.title || u.roleTitle || u.role || "",
-        graduationYear: p.graduationYear || u.graduationYear || u.gradYear || "",
-        department: p.department || u.department || u.dept || "",
-        location: p.location || p.city || u.location || u.city || "",
-        skills: Array.isArray(p.skills) ? p.skills : (Array.isArray(u.skills) ? u.skills : []),
+        name,
+        avatar,
+        company,
+        role: title,
+        rawRole,
+        headline: pick(p.headline, u.headline, u.profileHeadline, mongo.profileHeadline, ""),
+        graduationYear,
+        department,
+        location,
+        skills,
         mentorAvailable: p.mentorAvailable ?? !!u.mentorAvailable,
         linkedinSynced: p.linkedinSynced ?? !!u.linkedinSynced,
+        linkedinUrl,
         rating: p.rating ?? (u.rating || 0),
         mentoringSessions: p.mentoringSessions ?? (u.mentoringSessions || 0),
-        isCurrentStudent: (p.isCurrentStudent ?? u.isCurrentStudent) ? true : (u.role === 'student'),
-        roleCategory: (p.role === 'student' || p.isCurrentStudent || u.role === 'student' || u.isCurrentStudent) ? 'student' : 'alumni',
-        visible: p.visible,
+        source: 'user',
+        isCurrentStudent: u.isCurrentStudent || isStudent,
+        roleCategory: isStudent ? 'student' : 'alumni',
+        visible: p.visible ?? u.visible ?? true,
       };
     });
     const peopleIds = new Set((people || []).map((u: any) => u.id));
     const extraProfiles = Object.entries(profiles || {})
       .filter(([pid]) => !peopleIds.has(pid))
-      .map(([pid, p]: any) => ({
-        id: pid,
-        name: p.name || "Unnamed",
-        avatar: p.avatar || p.photoURL || "",
-        company: p.company || "",
-        role: p.role || p.title || "",
-        graduationYear: p.graduationYear || "",
-        department: p.department || "",
-        location: p.location || p.city || "",
-        skills: Array.isArray(p.skills) ? p.skills : [],
-        mentorAvailable: !!p.mentorAvailable,
-        linkedinSynced: !!p.linkedinSynced,
-        rating: p.rating || 0,
-        mentoringSessions: p.mentoringSessions || 0,
-        isCurrentStudent: !!p.isCurrentStudent,
-        roleCategory: (p.role === 'student' || p.isCurrentStudent) ? 'student' : 'alumni',
-        visible: p.visible,
-      }));
+      .map(([pid, p]: any) => {
+        const name = pick(p.name, p.fullName, "Unnamed");
+        const avatar = pick(p.avatar, p.photoURL, p.avatarUrl, p.profilePicture, "");
+        const company = pick(p.company, p.employer, p.currentCompany, "");
+        const title = pick(p.role, p.title, p.headline, "");
+        const graduationYear = pick(p.graduationYear, p.gradYear, p.batchYear, "");
+        const department = pick(p.department, p.program, p.dept, "");
+        const location = pick(p.location, p.city, "");
+        const skills = Array.isArray(p.skills) ? p.skills : ensureSkills(p.skills);
+        const rawRole = String(p.role || '').toLowerCase();
+        return {
+          id: pid,
+          name,
+          avatar,
+          company,
+          role: title,
+          rawRole,
+          headline: pick(p.headline, ""),
+          graduationYear,
+          department,
+          location,
+          skills,
+          mentorAvailable: !!p.mentorAvailable,
+          linkedinSynced: !!p.linkedinSynced,
+          linkedinUrl: pick(p.linkedinUrl, p.linkedin, ""),
+          rating: p.rating || 0,
+          mentoringSessions: p.mentoringSessions || 0,
+          source: 'profile',
+          isCurrentStudent: false,
+          roleCategory: 'alumni',
+          visible: p.visible ?? true,
+        };
+      });
     const mockMapped = mockAlumni.map((m: any) => ({
       id: `mock-${m.id}`,
       name: m.name,
@@ -316,51 +393,132 @@ export function AlumniDirectory() {
       isCurrentStudent: false,
       roleCategory: 'alumni',
     }));
-    return [...all, ...extraProfiles, ...mockMapped];
+    const combined = [...all, ...extraProfiles, ...mockMapped];
+    return combined;
   }, [people, profiles]);
 
   const filteredAlumni = items.filter((alumni: any) => {
     const isVisible = alumni.visible !== false; // default to visible when undefined
     if (!isVisible) return false;
-    const matchAudience = audience === 'alumni' ? alumni.roleCategory === 'alumni' : (alumni.isCurrentStudent || alumni.roleCategory === 'student');
+    const rr = String(alumni.rawRole || '').toLowerCase();
+    if (rr === 'admin' || rr === 'super_admin' || rr === 'super admin' || rr.includes('admin')) return false;
+    const matchAudience = audience === 'alumni'
+      ? (alumni.roleCategory === 'alumni' && (alumni.source === 'user' || alumni.source === 'profile'))
+      : ((alumni.isCurrentStudent || alumni.roleCategory === 'student') && alumni.source === 'user');
 
-    const matchesSearch = (alumni.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (alumni.company || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (Array.isArray(alumni.skills) ? alumni.skills : []).some((skill: string) => (skill || "").toLowerCase().includes(searchQuery.toLowerCase()));
+    // Search only by name
+    const matchesSearch = (alumni.name || "").toLowerCase().includes(searchQuery.toLowerCase());
     const yearStr = alumni.graduationYear ? alumni.graduationYear.toString() : "";
     const matchesYear = filters.year === "all" || yearStr === filters.year;
     const matchesDepartment = filters.department === "all" || alumni.department === filters.department;
     const locationStr = alumni.location || "";
     const matchesLocation = filters.location === "all" || locationStr.includes(filters.location);
-    const matchesMentor = !filters.mentorAvailable || !!alumni.mentorAvailable;
-
-    return matchAudience && matchesSearch && matchesYear && matchesDepartment && matchesLocation && matchesMentor;
+    const matchesCompany = (filters.company === "all" || !filters.company) || (alumni.company || "").toLowerCase().includes(String(filters.company).toLowerCase());
+    const matchesSkill = (filters.skill === 'all' || !filters.skill)
+      || (Array.isArray(alumni.skills) ? alumni.skills : []).some((s: string) => String(s || '').toLowerCase() === String(filters.skill).toLowerCase());
+    return matchAudience && matchesSearch && matchesYear && matchesDepartment && matchesLocation && matchesCompany && matchesSkill;
   });
 
-  const visibleAlumni = useMemo(() => filteredAlumni.slice(0, visibleCount), [filteredAlumni, visibleCount]);
+  const sortedOrFiltered = useMemo(() => {
+    let arr = filteredAlumni;
+    if (sortBy === 'active') {
+      arr = arr.filter((a: any) => a.source === 'user');
+    }
+    if (sortBy === 'name') {
+      arr = [...arr].sort((a: any, b: any) => String(a.name||'').localeCompare(String(b.name||'')));
+    }
+    return arr;
+  }, [filteredAlumni, sortBy]);
+
+  const visibleAlumni = useMemo(() => sortedOrFiltered.slice(0, visibleCount), [sortedOrFiltered, visibleCount]);
 
   useEffect(() => {
     setVisibleCount(24);
   }, [searchQuery, filters, audience]);
 
+  // Build dynamic filter option lists from items
+  const filterOptions = useMemo(() => {
+    const yearsSet = new Set<number>();
+    const deptSet = new Set<string>();
+    const locSet = new Set<string>();
+    const companySet = new Set<string>();
+    const skillsSet = new Set<string>();
+    (items || []).forEach((it: any) => {
+      if (it.graduationYear && Number(it.graduationYear)) yearsSet.add(Number(it.graduationYear));
+      if (it.department) deptSet.add(String(it.department));
+      if (it.location) locSet.add(String(it.location));
+      if (it.company) companySet.add(String(it.company));
+      if (Array.isArray(it.skills)) {
+        it.skills.forEach((s: string) => { if (s) skillsSet.add(String(s)); });
+      }
+    });
+    const years = Array.from(yearsSet).sort((a, b) => b - a).map(String);
+    const departments = Array.from(deptSet).sort((a, b) => a.localeCompare(b));
+    const locations = Array.from(locSet).sort((a, b) => a.localeCompare(b));
+    const companies = Array.from(companySet).sort((a, b) => a.localeCompare(b));
+    const skills = Array.from(skillsSet).sort((a, b) => a.localeCompare(b));
+    return { years, departments, locations, companies, skills };
+  }, [items]);
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold">Alumni Directory</h1>
-        <p className="text-muted-foreground">
-          Connect with {(items.length).toLocaleString()} people from your university
-        </p>
-      </div>
+      {/* Header removed per request */}
+
+      {/* Hero Section (Gradient) */}
+      <Card className="overflow-hidden rounded-3xl shadow-strong border-0 bg-gradient-to-br from-[#0b1b3a] to-[#1d4ed8]">
+        <div className="grid grid-cols-1 lg:grid-cols-3">
+          <div className="lg:col-span-2 p-6 md:p-10 text-white">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur px-3 py-1 text-xs">
+                Discover
+              </div>
+              <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight">Find alumni and peers</h2>
+              <p className="text-white/80">Search by Name. Filter by Role & Company. Start Networking, Start Networking!</p>
+            </div>
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60" onClick={() => {
+                requestAnimationFrame(() => searchSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+              }}>
+                Find Alumni
+              </Button>
+              <Button
+                variant="outline"
+                className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60"
+                onClick={() => {
+                  setAudience('students');
+                  requestAnimationFrame(() => searchSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                }}
+              >
+                Find Currently Enrolled Students
+              </Button>
+            </div>
+          </div>
+          <div className="relative">
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_30%_20%,white_0%,transparent_40%)]" />
+            <div className="relative h-full w-full p-6 md:p-8 flex items-center justify-center">
+              <div className="rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 p-6 text-white text-center max-w-xs space-y-3">
+                <div className="text-sm opacity-90">Tip</div>
+                <div className="text-lg font-semibold">Use filters to find the perfect match</div>
+                <Button className="h-9 bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a] w-full" onClick={() => {
+                  setShowAdvanced(true);
+                  requestAnimationFrame(() => searchSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                }}>
+                  Apply Filters
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {/* Search and Filters */}
       <Card>
-        <CardContent className="p-6 space-y-4">
+        <CardContent className="p-6 space-y-4" ref={searchSectionRef}>
           <div className="flex gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, company, or skills..."
+                placeholder="Search by name"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -370,66 +528,98 @@ export function AlumniDirectory() {
               <Button variant={audience === 'alumni' ? "default" : "outline"} onClick={() => setAudience('alumni')}>Alumni</Button>
               <Button variant={audience === 'students' ? "default" : "outline"} onClick={() => setAudience('students')}>Current Students</Button>
             </div>
-            <Button variant="outline" className="gap-2">
-              <Filter className="h-4 w-4" />
-              Advanced
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Select value={filters.year} onValueChange={(value) => setFilters(prev => ({ ...prev, year: value }))}>
-              <SelectTrigger>
-                <SelectValue placeholder="Graduation Year" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Years</SelectItem>
-                <SelectItem value="2024">2024</SelectItem>
-                <SelectItem value="2023">2023</SelectItem>
-                <SelectItem value="2022">2022</SelectItem>
-                <SelectItem value="2021">2021</SelectItem>
-                <SelectItem value="2020">2020</SelectItem>
-                <SelectItem value="2019">2019</SelectItem>
-                <SelectItem value="2018">2018</SelectItem>
-                <SelectItem value="2017">2017</SelectItem>
-                <SelectItem value="2016">2016</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={filters.department} onValueChange={(value) => setFilters(prev => ({ ...prev, department: value }))}>
-              <SelectTrigger>
-                <SelectValue placeholder="Department" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                <SelectItem value="Computer Science">Computer Science</SelectItem>
-                <SelectItem value="Business">Business</SelectItem>
-                <SelectItem value="Engineering">Engineering</SelectItem>
-                <SelectItem value="Electrical Engineering">Electrical Engineering</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={filters.location} onValueChange={(value) => setFilters(prev => ({ ...prev, location: value }))}>
-              <SelectTrigger>
-                <SelectValue placeholder="Location" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Locations</SelectItem>
-                <SelectItem value="CA">California</SelectItem>
-                <SelectItem value="WA">Washington</SelectItem>
-                <SelectItem value="TX">Texas</SelectItem>
-                <SelectItem value="NY">New York</SelectItem>
-              </SelectContent>
-            </Select>
-
             <Button
-              variant={filters.mentorAvailable ? "default" : "outline"}
-              onClick={() => setFilters(prev => ({ ...prev, mentorAvailable: !prev.mentorAvailable }))}
+              variant={showAdvanced ? "default" : "outline"}
               className="gap-2"
+              onClick={() => setShowAdvanced((v) => !v)}
             >
-              <Heart className="h-4 w-4" />
-              Mentors Only
+              <Filter className="h-4 w-4" />
+              Filters
             </Button>
           </div>
+
+          {(user?.role === 'admin' || user?.role === 'super_admin') && (
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={syncSystemUsers}>Sync System Users</Button>
+            </div>
+          )}
+
+          {showAdvanced && (
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 pt-2">
+              <Select value={filters.year} onValueChange={(value) => setFilters(prev => ({ ...prev, year: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Graduation Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Years</SelectItem>
+                  {filterOptions.years.map((y) => (
+                    <SelectItem key={y} value={y}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={filters.department} onValueChange={(value) => setFilters(prev => ({ ...prev, department: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Department" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {filterOptions.departments.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={filters.location} onValueChange={(value) => setFilters(prev => ({ ...prev, location: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Locations</SelectItem>
+                  {filterOptions.locations.map((l) => (
+                    <SelectItem key={l} value={l}>{l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filters.company || 'all'} onValueChange={(value) => setFilters((prev) => ({ ...prev, company: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Company" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Companies</SelectItem>
+                  {filterOptions.companies.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filters.skill || 'all'} onValueChange={(value) => setFilters((prev) => ({ ...prev, skill: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Skill" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Skills</SelectItem>
+                  {filterOptions.skills.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="md:col-span-5 flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setFilters((prev) => ({
+                    ...prev,
+                    company: "all",
+                    skill: "",
+                    year: "all",
+                    department: "all",
+                    location: "all",
+                  }))}
+                >
+                  Clear advanced filters
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -437,18 +627,16 @@ export function AlumniDirectory() {
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <p className="text-sm text-muted-foreground">
-            Showing {filteredAlumni.length} of {items.length} people
+            Showing {sortedOrFiltered.length} of {items.length} people
           </p>
-          <Select defaultValue="relevance">
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Sort by" />
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Sort/Filter" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="relevance">Most Relevant</SelectItem>
               <SelectItem value="name">Name (A-Z)</SelectItem>
-              <SelectItem value="year">Graduation Year</SelectItem>
-              <SelectItem value="company">Company</SelectItem>
-              <SelectItem value="rating">Mentor Rating</SelectItem>
+              <SelectItem value="active">Active Users (Registered)</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -495,6 +683,9 @@ export function AlumniDirectory() {
 
                 {/* Actions */}
                 <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1 bg-yellow-400 text-black hover:bg-yellow-300 border-0" onClick={() => setViewing(alumni)}>
+                    View Profile
+                  </Button>
                   {(() => {
                     const id = String(alumni.id);
                     const isConnected = acceptedIds.has(id);
@@ -576,6 +767,56 @@ export function AlumniDirectory() {
         </>
         )}
       </div>
+
+      {/* Profile Modal */}
+      <Dialog open={!!viewing} onOpenChange={(open) => { if (!open) setViewing(null); }}>
+        <DialogContent className="max-w-2xl">
+          {viewing && (
+            <div className="space-y-4">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src={viewing.avatar} alt={viewing.name} />
+                    <AvatarFallback>{String(viewing.name || 'U').split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="text-xl font-semibold">{viewing.name}</div>
+                    <div className="text-sm text-muted-foreground">{viewing.role}</div>
+                  </div>
+                </DialogTitle>
+                <DialogDescription>
+                  {viewing.headline || ''}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1 text-sm">
+                  <div className="flex items-center gap-2"><Briefcase className="h-4 w-4" /> {viewing.company || '—'}</div>
+                  <div className="flex items-center gap-2"><GraduationCap className="h-4 w-4" /> {viewing.department || '—'}{viewing.graduationYear ? ` '${String(viewing.graduationYear).slice(-2)}` : ''}</div>
+                  <div className="flex items-center gap-2"><MapPin className="h-4 w-4" /> {viewing.location || '—'}</div>
+                  {viewing.linkedinSynced && (
+                    <Badge variant="secondary" className="mt-1">LinkedIn Synced</Badge>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">Skills</div>
+                  <div className="flex flex-wrap gap-2">
+                    {(Array.isArray(viewing.skills) ? viewing.skills : []).map((s: string) => (
+                      <Badge key={s} variant="outline">{s}</Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {viewing.linkedinUrl && (
+                <div>
+                  <a href={viewing.linkedinUrl} target="_blank" rel="noreferrer" className="text-primary underline">View on LinkedIn</a>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
     
   );
