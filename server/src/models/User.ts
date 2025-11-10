@@ -16,6 +16,7 @@ const UserSchema = new Schema(
     profilePicture: { type: String },
     program: { type: String },
     currentCompany: { type: String },
+    position: { type: String },
     // keep skills as a simple string (comma-separated) to match current client expectations
     skills: { type: String },
     profileHeadline: { type: String },
@@ -43,6 +44,7 @@ export type IUser = {
   profilePicture?: string | null;
   program?: string | null;
   currentCompany?: string | null;
+  position?: string | null;
   skills?: string | null;
   profileHeadline?: string | null;
   location?: string | null;

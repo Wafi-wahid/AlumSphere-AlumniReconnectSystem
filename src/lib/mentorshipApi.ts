@@ -32,4 +32,6 @@ export const MentorshipAPI = {
     preferredDateTime: string;
     notes?: string;
   }) => request<{ ok: boolean; id: string }>(`/mentorshipRequests`, { method: 'POST', body: JSON.stringify(payload) }),
+  listMyRequests: (as: 'student'|'mentor' = 'student') => request<{ items: any[]; nextPage?: number }>(`/mentorshipRequests?as=${as}`),
+  updateRequest: (id: string, status: 'Accepted'|'Declined'|'Cancelled') => request<{ ok: boolean }>(`/mentorshipRequests/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 };
