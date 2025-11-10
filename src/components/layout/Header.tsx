@@ -15,7 +15,7 @@ import { useAuth } from "@/store/auth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { db, auth } from "@/lib/firebase";
-import { collection, onSnapshot, query, where, updateDoc, setDoc, doc, arrayUnion, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, where, updateDoc, setDoc, doc, arrayUnion, getDoc, deleteDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 interface HeaderProps {
@@ -37,6 +37,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
   const lastUpdatesRef = useRef<Record<string, number>>({});
   const [notifications, setNotifications] = useState<Array<{ id: string; title: string; body?: string; convId?: string; createdAt: number }>>([]);
   const [incomingCall, setIncomingCall] = useState<null | { convId: string; type: 'audio' | 'video'; fromName: string; toName?: string }>(null);
+  const [incomingRequests, setIncomingRequests] = useState<Array<{ id: string; senderMongoId?: string; name?: string; avatar?: string; createdAt?: any }>>([]);
   const ringCtxRef = useRef<AudioContext | null>(null);
   const ringOscRef = useRef<OscillatorNode | null>(null);
   const ringGainRef = useRef<GainNode | null>(null);
@@ -72,7 +73,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
       Notification.requestPermission().catch(() => {});
     }
     if (!user?.id) return;
-    if (auth.currentUser?.isAnonymous) return; // skip when anonymous due to rules
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return; // require non-anonymous auth per rules
     const q = query(collection(db, "conversations"), where("participants", "array-contains", user.id));
     const unsub = onSnapshot(q, (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
@@ -121,6 +122,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     if (auth.currentUser?.isAnonymous) return; // skip when anonymous due to rules
     const unsubReq = onSnapshot(collection(db, 'connections', user.id, 'requests'), (snap) => {
       const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setIncomingRequests(items);
       setPendingReqCount(items.length || 0);
       items.forEach((it: any) => {
         const ts = it.createdAt?.toMillis ? it.createdAt.toMillis() : 0;
@@ -203,7 +205,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     (async () => {
       try {
         if (!user?.id) return;
-        if (auth.currentUser?.isAnonymous) return;
+        if (!auth.currentUser || auth.currentUser.isAnonymous) return;
         const sumRef = doc(db, 'users', user.id, 'gamification', 'summary');
         await setDoc(sumRef, { ownerUid: auth.currentUser?.uid || undefined, earnedBadges: arrayUnion('Login') }, { merge: true });
       } catch {}
@@ -212,7 +214,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
 
   useEffect(() => {
     if (!user?.id) return;
-    if (auth.currentUser?.isAnonymous) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
     const ref = doc(db, 'users', user.id, 'gamification', 'summary');
     const unsub = onSnapshot(ref, (snap) => {
       const d = snap.data() as any;
@@ -242,6 +244,46 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
   };
   const clearNotifications = () => setNotifications([]);
   const dismissNotification = (id: string) => setNotifications((prev) => prev.filter((n) => n.id !== id));
+  const acceptRequest = async (req: { id: string; senderMongoId?: string; name?: string; avatar?: string }) => {
+    try {
+      if (!user?.id) return;
+      const recipientMongoId = String(user.id);
+      const senderAuthUid = String(req.id);
+      const senderMongoId = String(req.senderMongoId || '');
+      if (!senderMongoId) { toast({ title: 'Missing sender ID', description: 'Cannot accept: senderMongoId not provided.' }); return; }
+      // Create accepted for both users (Mongo IDs)
+      await setDoc(doc(db, 'connections', recipientMongoId, 'accepted', senderMongoId), {
+        id: senderMongoId,
+        name: req.name || 'User',
+        avatar: req.avatar || '',
+        connectedAt: new Date(),
+      }, { merge: true });
+      await setDoc(doc(db, 'connections', senderMongoId, 'accepted', recipientMongoId), {
+        id: recipientMongoId,
+        name: user?.name || 'User',
+        avatar: (currentUser as any)?.avatar || '',
+        connectedAt: new Date(),
+      }, { merge: true });
+      // Delete pending
+      await deleteDoc(doc(db, 'connections', recipientMongoId, 'requests', senderAuthUid));
+      await deleteDoc(doc(db, 'connections', senderAuthUid, 'sent', recipientMongoId));
+      toast({ title: 'Connection accepted' });
+    } catch (e: any) {
+      toast({ title: 'Failed to accept', description: e?.message || 'Try again' });
+    }
+  };
+  const declineRequest = async (req: { id: string }) => {
+    try {
+      if (!user?.id) return;
+      const recipientMongoId = String(user.id);
+      const senderAuthUid = String(req.id);
+      await deleteDoc(doc(db, 'connections', recipientMongoId, 'requests', senderAuthUid));
+      await deleteDoc(doc(db, 'connections', senderAuthUid, 'sent', recipientMongoId));
+      toast({ title: 'Request declined' });
+    } catch (e: any) {
+      toast({ title: 'Failed to decline', description: e?.message || 'Try again' });
+    }
+  };
   const [dismissedConvIds, setDismissedConvIds] = useState<Set<string>>(new Set());
   // Load persisted header-dismissed conversations from profile
   useEffect(() => {
@@ -377,6 +419,28 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                   <div className="p-3 text-sm text-muted-foreground">No new notifications</div>
                 ) : (
                   <div className="max-h-80 overflow-auto">
+                    {incomingRequests.length > 0 && (
+                      <div className="p-2 border-b">
+                        <div className="text-xs font-medium text-muted-foreground mb-1">Incoming Requests</div>
+                        <div className="space-y-2">
+                          {incomingRequests.map((r) => (
+                            <div key={`req_${r.id}`} className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Avatar className="h-6 w-6">
+                                  <AvatarImage src={r.avatar} alt={r.name} />
+                                  <AvatarFallback>{String(r.name || 'U').slice(0,2).toUpperCase()}</AvatarFallback>
+                                </Avatar>
+                                <div className="truncate text-sm">{r.name || 'Someone'}</div>
+                              </div>
+                              <div className="flex gap-1 shrink-0">
+                                <Button size="sm" variant="default" onClick={(e) => { e.stopPropagation(); acceptRequest(r); }}>Accept</Button>
+                                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); declineRequest(r); }}>Decline</Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {notifications.map((n) => (
                       <DropdownMenuItem key={n.id} className="flex items-start gap-2">
                         <div className="flex-1 min-w-0" onClick={() => openNotification(n)}>

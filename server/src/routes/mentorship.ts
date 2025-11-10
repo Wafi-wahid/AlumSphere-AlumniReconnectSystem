@@ -26,6 +26,66 @@ mentorshipRouter.get('/mentors', async (req, res, next) => {
         { profileHeadline: rx },
         { skills: rx },
       ]});
+
+// GET /mentorshipRequests?as=student|mentor — list my requests
+mentorshipRouter.get('/mentorshipRequests', requireAuth, async (req, res, next) => {
+  try {
+    const me = (req as any).user?.id as string;
+    const as = (String(req.query.as || 'student').toLowerCase());
+    const page = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit || 20)));
+    const skip = (page - 1) * limit;
+    const where = as === 'mentor' ? { mentorId: me } : { studentId: me };
+    const [docs, count] = await Promise.all([
+      MentorshipRequest.find(where)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean() as any,
+      MentorshipRequest.countDocuments(where),
+    ]);
+    res.json({ items: docs.map((d: any) => ({
+      id: String(d._id),
+      studentId: String(d.studentId),
+      mentorId: String(d.mentorId),
+      topic: d.topic,
+      sessionType: d.sessionType,
+      preferredDateTime: d.preferredDateTime,
+      notes: d.notes,
+      status: d.status,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+    })), nextPage: (skip + docs.length) < count ? page + 1 : undefined });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /mentorshipRequests/:id — mentor: accept/decline; student: cancel
+const updateReqSchema = z.object({ status: z.enum(['Accepted','Declined','Cancelled']) });
+mentorshipRouter.patch('/mentorshipRequests/:id', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = updateReqSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join(', ') });
+    const id = req.params.id;
+    const me = (req as any).user?.id as string;
+    const doc = await MentorshipRequest.findById(id).lean() as any;
+    if (!doc) return res.status(404).json({ error: 'Request not found' });
+    // Only allow status change from Pending
+    if (doc.status !== 'Pending') return res.status(400).json({ error: 'Request already processed' });
+    const desired = parsed.data.status;
+    // Mentor can Accept/Decline; Student can Cancel
+    if ((desired === 'Accepted' || desired === 'Declined')) {
+      if (String(doc.mentorId) !== me) return res.status(403).json({ error: 'Only mentor can respond' });
+    } else if (desired === 'Cancelled') {
+      if (String(doc.studentId) !== me) return res.status(403).json({ error: 'Only student can cancel' });
+    }
+    await MentorshipRequest.updateOne({ _id: id }, { $set: { status: desired } });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
     }
 
     if (topic && topic !== 'all') {
@@ -97,7 +157,7 @@ mentorshipRouter.get('/mentors/:id', async (req, res, next) => {
 const createRequestSchema = z.object({
   mentorId: z.string().min(1),
   topic: z.string().min(2),
-  sessionType: z.enum(['30m', '45m', '60m']),
+  sessionType: z.enum(['30m', '45m', '60m', 'individual', 'group']),
   preferredDateTime: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid datetime'),
   notes: z.string().max(1000).optional(),
 });

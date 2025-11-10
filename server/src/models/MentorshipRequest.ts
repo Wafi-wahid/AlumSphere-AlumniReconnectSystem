@@ -5,7 +5,7 @@ const MentorshipRequestSchema = new Schema(
     studentId: { type: String, required: true },
     mentorId: { type: String, required: true },
     topic: { type: String, required: true },
-    sessionType: { type: String, enum: ['30m', '45m', '60m'], required: true },
+    sessionType: { type: String, enum: ['30m', '45m', '60m', 'individual', 'group'], required: true },
     preferredDateTime: { type: Date, required: true },
     notes: { type: String },
     status: { type: String, enum: ['Pending', 'Accepted', 'Declined', 'Cancelled'], default: 'Pending', index: true },
@@ -18,7 +18,7 @@ export type TMentorshipRequest = {
   studentId: string;
   mentorId: string;
   topic: string;
-  sessionType: '30m' | '45m' | '60m';
+  sessionType: '30m' | '45m' | '60m' | 'individual' | 'group';
   preferredDateTime: Date;
   notes?: string;
   status: 'Pending' | 'Accepted' | 'Declined' | 'Cancelled';

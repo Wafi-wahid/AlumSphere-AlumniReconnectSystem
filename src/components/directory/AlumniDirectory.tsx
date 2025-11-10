@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Filter, MapPin, Briefcase, GraduationCap, MessageCircle, Heart } from "lucide-react";
+import { Search, Filter, MapPin, Briefcase, GraduationCap, MessageCircle, Heart, X, Linkedin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,11 +13,13 @@ import { collection, onSnapshot, query, doc, setDoc, deleteDoc } from "firebase/
 import { getAuth, signInAnonymously } from "firebase/auth";
 import { useAuth } from "@/store/auth";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 const mockAlumni: any[] = [];
 
 export function AlumniDirectory() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState({
     year: "all",
@@ -54,7 +56,7 @@ export function AlumniDirectory() {
     const role = u.role || "alumni";
     const graduationYear = u.gradYear ?? u.batchYear ?? "";
     const department = u.program || "";
-    const title = u.profileHeadline || "";
+    const title = u.position || u.profileHeadline || "";
     const company = u.currentCompany || "";
     const avatar = u.profilePicture || "";
     const location = u.location || "";
@@ -79,6 +81,7 @@ export function AlumniDirectory() {
       experienceYears,
       location,
       profileHeadline: u.profileHeadline || "",
+      position: u.position || "",
       program: u.program || "",
       skills: skillsArray,
       profilePicture: avatar,
@@ -94,6 +97,7 @@ export function AlumniDirectory() {
       isCurrentStudent: role === 'student',
       // Display fields used by UI
       title,
+      position: u.position || "",
       company,
       graduationYear,
       department,
@@ -158,15 +162,15 @@ export function AlumniDirectory() {
       id: "alumni-1",
       name: "Syed Aliyan Abbas",
       avatar: "/alumni/alumni1.jpg",
-      role: "Junior Software Engineer",
+      position: "Junior Software Engineer",
       headline: "Software Engineer @CareCloud",
-      company: "CareCloud",
+      currentCompany: "CareCloud",
       gradSeason: "Spring",
-      graduationYear: 2025,
+      gradYear: 2025,
       department: "Software Engineering",
       location: "Islamabad, pk",
       skills: ["React", "TypeScript", "Next.js", "MERN stack"],
-      linkedinUrl: "https://www.linkedin.com/in/syed-aliyan-abbas-0a201a308/",
+      linkedinId: "https://www.linkedin.com/in/syed-aliyan-abbas-0a201a308/",
       mentorAvailable: false,
       linkedinSynced: true,
       visible: true,
@@ -176,15 +180,15 @@ export function AlumniDirectory() {
       id: "alumni-2",
       name: "Afia Ishaq",
       avatar: "/alumni/alumni2.jpg",
-      role: "Team Lead",
+      position: "Team Lead",
       headline: "Team Lead | Data Scientist | Gold Medalist | GoHighLevel Certified",
-      company: "Tao Tao Tech",
+      currentCompany: "Tao Tao Tech",
       gradSeason: "Spring",
-      graduationYear: 2020,
+      gradYear: 2020,
       department: "Software Engineering",
       location: "Islamabad, pk",
       skills: ["Marketing", "WordPress Design", "Web Development", "Machine Learning"],
-      linkedinUrl: "https://www.linkedin.com/in/afia-ishaq/",
+      linkedinId: "https://www.linkedin.com/in/afia-ishaq/",
       mentorAvailable: false,
       linkedinSynced: true,
       visible: true,
@@ -194,15 +198,15 @@ export function AlumniDirectory() {
       id: "alumni-3",
       name: "Anas Shoaib",
       avatar: "/alumni/alumni3.jpg",
-      role: "Project Implementation Specialist / HRMS Expert ",
+      position: "Project Implementation Specialist / HRMS Expert ",
       headline: "Associate Project Manager @ PrimeHRMS | Project Management | Support Coordinator | HRMS Domain Expert",
-      company: "PrimeHRMS",
+      currentCompany: "PrimeHRMS",
       gradSeason: "Spring",
-      graduationYear: 2020,
+      gradYear: 2020,
       department: "Computer Science",
       location: "Islamabad, pk",
       skills: ["HR", "Software Project Management", "Web Development", "React.js", "Technical Support"],
-      linkedinUrl: "https://www.linkedin.com/in/iem-anas/",
+      linkedinId: "https://www.linkedin.com/in/iem-anas/",
       mentorAvailable: false,
       linkedinSynced: true,
       visible: true,
@@ -212,15 +216,15 @@ export function AlumniDirectory() {
       id: "alumni-4",
       name: "Abdullah Saleem ",
       avatar: "/alumni/alumni4.jpg",
-      role: "Android Developer",
+      position: "Android Developer",
       headline: "Android Developer | Computer Science",
-      company: "Markalytics",
+      currentCompany: "Markalytics",
       gradSeason: "Spring",
-      graduationYear: 2024,
+      gradYear: 2024,
       department: "Computer Science",
       location: "Islamabad, pk",
       skills: ["ClickUp", "Kotlin", "Python", "Data Science", "Android Development"],
-      linkedinUrl: "https://www.linkedin.com/in/abdullah-saleem-as/",
+      linkedinId: "https://www.linkedin.com/in/abdullah-saleem-as/",
       mentorAvailable: false,
       linkedinSynced: true,
       visible: true,
@@ -230,15 +234,15 @@ export function AlumniDirectory() {
       id: "alumni-5",
       name: "Hannan Javaid",
       avatar: "/alumni/alumni5.jpg",
-      role: "Chief Executive Officer",
+      position: "Chief Executive Officer",
       headline: "Founder & CEO at NOITS | Business & Tech Consultant | SaaS, Web & Mobile Solutions | Digital Growth Leader",
-      company: "Noits",
+      currentCompany: "Noits",
       gradSeason: "Spring",
-      graduationYear: 2020,
+      gradYear: 2020,
       department: "Information Technology",
       location: "Islamabad, pk",
       skills: ["Web Development", "Digital Marketing", "Project Management", "Data Analysis"],
-      linkedinUrl: "https://www.linkedin.com/in/hannan-javaid5445/",
+      linkedinId: "https://www.linkedin.com/in/hannan-javaid5445/",
       mentorAvailable: false,
       linkedinSynced: true,
       visible: true,
@@ -309,12 +313,17 @@ export function AlumniDirectory() {
       const name = pick(p.name, u.name, u.fullName, mongo.name, "Unnamed");
       const avatar = pick(p.avatar, p.photoURL, u.avatar, u.photoURL, u.avatarUrl, u.profilePicture, mongo.profilePicture, "");
       const company = pick(p.company, u.company, u.employer, u.currentCompany, mongo.currentCompany, mongo.company, "");
-      const title = pick(p.role, p.title, u.title, u.roleTitle, u.profileHeadline, mongo.profileHeadline, u.role, "");
+      const title = pick(
+        p.position, p.role, p.title,
+        u.title, u.position, u.roleTitle, u.profileHeadline,
+        mongo.profileHeadline, mongo.position,
+        ""
+      );
       const graduationYear = pick(p.graduationYear, u.graduationYear, u.gradYear, mongo.gradYear, u.batchYear, mongo.batchYear, "");
       const department = pick(p.department, u.department, u.dept, u.program, mongo.program, "");
       const location = pick(p.location, p.city, u.location, u.city, mongo.location, "");
       const skills = Array.isArray(p.skills) ? p.skills : ensureSkills(pick(u.skills, mongo.skills, []));
-      const linkedinUrl = pick(p.linkedinUrl, u.linkedinUrl, mongo.linkedinId, "");
+      const linkedinUrl = pick(p.linkedinUrl, p.linkedinId, u.linkedinUrl, u.linkedinId, mongo.linkedinId, "");
       const rawRole = String(p.rawRole || u.rawRole || u.role || mongo.role || '').toLowerCase();
       const isStudent = rawRole === 'student';
       return {
@@ -347,7 +356,7 @@ export function AlumniDirectory() {
         const name = pick(p.name, p.fullName, "Unnamed");
         const avatar = pick(p.avatar, p.photoURL, p.avatarUrl, p.profilePicture, "");
         const company = pick(p.company, p.employer, p.currentCompany, "");
-        const title = pick(p.role, p.title, p.headline, "");
+        const title = pick(p.position, p.role, p.title, p.headline, "");
         const graduationYear = pick(p.graduationYear, p.gradYear, p.batchYear, "");
         const department = pick(p.department, p.program, p.dept, "");
         const location = pick(p.location, p.city, "");
@@ -367,7 +376,7 @@ export function AlumniDirectory() {
           skills,
           mentorAvailable: !!p.mentorAvailable,
           linkedinSynced: !!p.linkedinSynced,
-          linkedinUrl: pick(p.linkedinUrl, p.linkedin, ""),
+          linkedinUrl: pick(p.linkedinUrl, p.linkedinId, p.linkedin, ""),
           rating: p.rating || 0,
           mentoringSessions: p.mentoringSessions || 0,
           source: 'profile',
@@ -512,7 +521,7 @@ export function AlumniDirectory() {
       </Card>
 
       {/* Search and Filters */}
-      <Card>
+      <Card className="border-yellow-400">
         <CardContent className="p-6 space-y-4" ref={searchSectionRef}>
           <div className="flex gap-4">
             <div className="flex-1 relative">
@@ -521,7 +530,7 @@ export function AlumniDirectory() {
                 placeholder="Search by name"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="pl-10 border-yellow-400 focus-visible:ring-yellow-400"
               />
             </div>
             <div className="flex gap-2">
@@ -530,7 +539,9 @@ export function AlumniDirectory() {
             </div>
             <Button
               variant={showAdvanced ? "default" : "outline"}
-              className="gap-2"
+              className={showAdvanced
+                ? "gap-2 bg-blue-600 text-white hover:bg-blue-700 border-blue-600"
+                : "gap-2 border-blue-400 text-blue-700 hover:bg-blue-50"}
               onClick={() => setShowAdvanced((v) => !v)}
             >
               <Filter className="h-4 w-4" />
@@ -541,6 +552,7 @@ export function AlumniDirectory() {
           {(user?.role === 'admin' || user?.role === 'super_admin') && (
             <div className="flex justify-end">
               <Button size="sm" variant="outline" onClick={syncSystemUsers}>Sync System Users</Button>
+              <Button size="sm" variant="outline" className="ml-2" onClick={seedProfiles}>Seed Profiles</Button>
             </div>
           )}
 
@@ -646,11 +658,15 @@ export function AlumniDirectory() {
         ) : (
         <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {visibleAlumni.map((alumni: any) => (
-            <Card key={alumni.id} className="hover:shadow-md transition-shadow cursor-pointer group">
-              <CardContent className="p-6 space-y-4">
+          {visibleAlumni.map((alumni: any, idx: number) => (
+            <Card
+              key={alumni.id}
+              className="border border-blue-400 hover:border-blue-500 hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.01] transition-transform transition-shadow duration-200 cursor-pointer group rounded-xl h-full"
+              style={{ transitionDelay: `${Math.min(idx, 12) * 20}ms` }}
+            >
+              <CardContent className="p-6 space-y-4 h-full flex flex-col">
                 <div className="flex items-start gap-4">
-                  <Avatar className="h-16 w-16">
+                  <Avatar className="h-16 w-16 ring-1 ring-border group-hover:ring-primary/40 transition">
                     <AvatarImage src={alumni.avatar} alt={alumni.name} />
                     <AvatarFallback>
                       {alumni.name.split(' ').map((n: string) => n[0]).join('')}
@@ -682,9 +698,21 @@ export function AlumniDirectory() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2">
+                <div className="flex gap-2 mt-auto">
                   <Button size="sm" variant="outline" className="flex-1 bg-yellow-400 text-black hover:bg-yellow-300 border-0" onClick={() => setViewing(alumni)}>
                     View Profile
+                  </Button>
+                  <Button
+                    aria-label="Message"
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 border border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400"
+                    onClick={() => {
+                      const params = new URLSearchParams({ tab: 'messages', to: String(alumni.id), toName: String(alumni.name || 'User') });
+                      navigate({ pathname: '/', search: `?${params.toString()}` });
+                    }}
+                  >
+                    <MessageCircle className="h-4 w-4" />
                   </Button>
                   {(() => {
                     const id = String(alumni.id);
@@ -693,7 +721,6 @@ export function AlumniDirectory() {
                     if (!user?.id || id === String(user.id)) {
                       return (
                         <Button size="sm" className="flex-1" disabled>
-                          <MessageCircle className="h-4 w-4 mr-2" />
                           Connect
                         </Button>
                       );
@@ -726,16 +753,20 @@ export function AlumniDirectory() {
                         if (!authUid) { toast.error('Not signed in'); return; }
                         if (authUid === id) { toast.message('You cannot connect to yourself'); return; }
                         try {
+                          // recipient inbox: requests/{senderAuthUid}
                           await setDoc(doc(db, 'connections', id, 'requests', authUid), {
-                            id: authUid,
+                            id: authUid, // senderAuthUid
+                            senderMongoId: String(user?.id || ''),
                             name: user?.name || 'User',
                             avatar: user?.avatar || '',
                             createdAt: new Date(),
                           });
+                          // sender outbox: sent/{recipientMongoId}
                           await setDoc(doc(db, 'connections', authUid, 'sent', id), {
-                            id,
-                            name: alumni?.name || 'Alumni',
-                            avatar: alumni?.avatar || '',
+                            id, // recipientMongoId
+                            recipientMongoId: id,
+                            recipientName: alumni?.name || 'Alumni',
+                            recipientAvatar: alumni?.avatar || '',
                             createdAt: new Date(),
                           });
                           toast.success('Connection request sent');
@@ -743,7 +774,6 @@ export function AlumniDirectory() {
                           toast.error(e?.message || 'Failed to send request');
                         }
                       }}>
-                        <MessageCircle className="h-4 w-4 mr-2" />
                         Connect
                       </Button>
                     );
@@ -770,49 +800,75 @@ export function AlumniDirectory() {
 
       {/* Profile Modal */}
       <Dialog open={!!viewing} onOpenChange={(open) => { if (!open) setViewing(null); }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl p-0 overflow-hidden [&>button.absolute.right-4.top-4]:text-white [&>button.absolute.right-4.top-4]:opacity-100">
           {viewing && (
-            <div className="space-y-4">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-3">
-                  <Avatar className="h-12 w-12">
+            <div className="w-full">
+              {/* Gradient Header */}
+              <div className="relative bg-gradient-to-br from-[#0b1b3a] to-[#1d4ed8] px-6 pt-8 pb-16 text-white">
+                <div className="flex items-start gap-4">
+                  <Avatar className="h-16 w-16 ring-2 ring-white/60 shadow-md">
                     <AvatarImage src={viewing.avatar} alt={viewing.name} />
-                    <AvatarFallback>{String(viewing.name || 'U').split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
+                    <AvatarFallback className="text-black">{String(viewing.name || 'U').split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
                   </Avatar>
-                  <div>
-                    <div className="text-xl font-semibold">{viewing.name}</div>
-                    <div className="text-sm text-muted-foreground">{viewing.role}</div>
-                  </div>
-                </DialogTitle>
-                <DialogDescription>
-                  {viewing.headline || ''}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1 text-sm">
-                  <div className="flex items-center gap-2"><Briefcase className="h-4 w-4" /> {viewing.company || '—'}</div>
-                  <div className="flex items-center gap-2"><GraduationCap className="h-4 w-4" /> {viewing.department || '—'}{viewing.graduationYear ? ` '${String(viewing.graduationYear).slice(-2)}` : ''}</div>
-                  <div className="flex items-center gap-2"><MapPin className="h-4 w-4" /> {viewing.location || '—'}</div>
-                  {viewing.linkedinSynced && (
-                    <Badge variant="secondary" className="mt-1">LinkedIn Synced</Badge>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Skills</div>
-                  <div className="flex flex-wrap gap-2">
-                    {(Array.isArray(viewing.skills) ? viewing.skills : []).map((s: string) => (
-                      <Badge key={s} variant="outline">{s}</Badge>
-                    ))}
+                  <div className="flex-1">
+                    <div className="text-2xl font-bold leading-tight">{viewing.name}</div>
+                    <div className="text-white/90 text-sm">{viewing.role}</div>
+                    {viewing.headline && (
+                      <div className="mt-1 text-white/90 text-base italic">{viewing.headline}</div>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {viewing.linkedinUrl && (
-                <div>
-                  <a href={viewing.linkedinUrl} target="_blank" rel="noreferrer" className="text-primary underline">View on LinkedIn</a>
+              {/* Content Card */}
+              <div className="-mt-10 px-6 pb-6">
+                <div className="rounded-xl border bg-background shadow-sm p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3 text-sm">
+                      <div className="text-xs font-medium text-muted-foreground">Overview</div>
+                      <div className="flex items-center gap-2"><Briefcase className="h-4 w-4" /> {viewing.company || '—'}</div>
+                      <div className="flex items-center gap-2"><GraduationCap className="h-4 w-4" /> {viewing.department || '—'}{viewing.graduationYear ? ` '${String(viewing.graduationYear).slice(-2)}` : ''}</div>
+                      <div className="flex items-center gap-2"><MapPin className="h-4 w-4" /> {viewing.location || '—'}</div>
+                      {viewing.linkedinSynced && (
+                        <Badge variant="secondary" className="mt-1 w-fit bg-blue-50 text-blue-700 border border-blue-200">LinkedIn Synced</Badge>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <div className="text-xs font-medium text-muted-foreground">Skills</div>
+                      <div className="flex flex-wrap gap-2">
+                        {(Array.isArray(viewing.skills) ? viewing.skills : []).map((s: string) => (
+                          <span key={s} className="px-2 py-1 text-xs rounded-full border border-yellow-200 bg-yellow-50 text-yellow-800">{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer Actions */}
+                  <div className="mt-6 flex items-center justify-between">
+                    {viewing.linkedinUrl ? (
+                      <Button asChild className="gap-2">
+                        <a href={viewing.linkedinUrl} target="_blank" rel="noreferrer">
+                          <Linkedin className="h-4 w-4" /> See LinkedIn profile
+                        </a>
+                      </Button>
+                    ) : <span />}
+                    <div className="flex gap-2">
+                      <Button
+                        aria-label="Message"
+                        size="sm"
+                        variant="outline"
+                        className="border border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400"
+                        onClick={() => {
+                          const params = new URLSearchParams({ tab: 'messages', to: String(viewing.id), toName: String(viewing.name || 'User') });
+                          navigate({ pathname: '/', search: `?${params.toString()}` });
+                        }}
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </DialogContent>

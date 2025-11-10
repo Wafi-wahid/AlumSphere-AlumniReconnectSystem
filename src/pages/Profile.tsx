@@ -36,6 +36,7 @@ const schema = z.object({
   batchSeason: z.enum(seasons),
   batchYear: z.coerce.number().int().min(2010).max(2025),
   currentCompany: z.string().optional().or(z.literal("")),
+  position: z.string().optional().or(z.literal("")),
   skills: z.string().optional().or(z.literal("")),
   profileHeadline: z.string().min(10, "Add a short, compelling headline"),
   location: z.string().min(2, "Enter your city/country"),
@@ -123,6 +124,7 @@ export default function Profile() {
           batchSeason: user.batchSeason || "Spring",
           batchYear: user.batchYear || 2010,
           currentCompany: user.currentCompany || "",
+          position: user.position || "",
           skills: user.skills || "",
           profileHeadline: user.profileHeadline || "",
           location: user.location || "",
@@ -531,6 +533,7 @@ export default function Profile() {
         ...data,
         profilePicture: data.profilePicture || undefined,
         currentCompany: data.currentCompany || undefined,
+        position: data.position || undefined,
         skills: data.skills || undefined,
       };
       const res = await UsersAPI.updateMe(payload);
@@ -934,6 +937,10 @@ export default function Profile() {
                   <div className="grid gap-2">
                     <Label htmlFor="company">Current Company</Label>
                     <Input id="company" placeholder="Optional" {...register("currentCompany")} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="position">Position</Label>
+                    <Input id="position" placeholder="e.g., Software Engineer" {...register("position")} />
                   </div>
                   <div className="md:col-span-2 flex items-center">
                     {isStudent ? (
