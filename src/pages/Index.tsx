@@ -7,6 +7,7 @@ import { HomePage } from "@/components/dashboard/HomePage";
 import { AlumniDirectory } from "@/components/directory/AlumniDirectory";
 import { MentorshipPage } from "@/components/mentorship/MentorshipPage";
 import { EventsPage } from "@/components/events/EventsPage";
+import { CareersPage } from "@/components/careers/CareersPage";
 import { CommunityPage } from "@/components/community/CommunityPage";
 import { MessagesPage } from "@/components/messages/MessagesPage";
 import { FameHub } from "@/components/fame/FameHub";
@@ -64,7 +65,7 @@ const Index = () => {
       case "mentorship":
         return <MentorshipPage />;
       case "careers":
-        return <div className="p-8"><h2 className="text-2xl font-bold">Careers - Coming Soon</h2></div>;
+        return <CareersPage />;
       case "events":
         return <EventsPage />;
       case "community":
