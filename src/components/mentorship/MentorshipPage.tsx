@@ -716,7 +716,10 @@ export function MentorshipPage() {
                 className="bg-transparent border-green-400 text-white hover:bg-green-900/20 hover:border-green-500"
                 onClick={() => {
                   if (!selectedMentor) return;
-                  const params = new URLSearchParams({ tab: 'messages', to: String(selectedMentor.id), toName: String(selectedMentor.name || 'User') });
+                  const me = String(user?.id || '');
+                  const other = String(selectedMentor.id);
+                  const convId = [me, other].filter(Boolean).sort().join('__');
+                  const params = new URLSearchParams({ tab: 'messages', to: other, toName: String(selectedMentor.name || 'User'), convId });
                   setShowProfileDialog(false);
                   navigate({ pathname: '/', search: `?${params.toString()}` });
                 }}

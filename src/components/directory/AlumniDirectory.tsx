@@ -708,7 +708,10 @@ export function AlumniDirectory() {
                     variant="outline"
                     className="flex-1 border border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400"
                     onClick={() => {
-                      const params = new URLSearchParams({ tab: 'messages', to: String(alumni.id), toName: String(alumni.name || 'User') });
+                      const me = String(user?.id || '');
+                      const other = String(alumni.id);
+                      const convId = [me, other].filter(Boolean).sort().join('__');
+                      const params = new URLSearchParams({ tab: 'messages', to: other, toName: String(alumni.name || 'User'), convId });
                       navigate({ pathname: '/', search: `?${params.toString()}` });
                     }}
                   >

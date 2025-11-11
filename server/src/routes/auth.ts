@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { User } from '../models/User';
 import { Types } from 'mongoose';
+import { initFirebaseAdmin, getAuth as getAdminAuth, getFirestore as getAdminFirestore } from '../firebaseAdmin';
 
 export const authRouter = Router();
 
@@ -209,6 +210,54 @@ authRouter.get('/me', requireAuth, async (req, res) => {
   const user = doc ? { id: String(doc._id), role: doc.role, name: doc.name, email: doc.email, profilePicture: doc.profilePicture } : null;
   if (!user) return res.status(404).json({ error: 'Not found' });
   return res.json({ user });
+});
+
+// POST /auth/firebase/custom-token — mint a Firebase Custom Token for the currently authenticated user (JWT cookie based)
+authRouter.post('/firebase/custom-token', requireAuth, async (req, res) => {
+  try {
+    initFirebaseAdmin();
+    const mongoId = (req as any).user.id as string;
+    if (!Types.ObjectId.isValid(mongoId)) return res.status(400).json({ error: 'Invalid user id' });
+    const doc = await User.findById(mongoId).lean() as any;
+    if (!doc) return res.status(404).json({ error: 'User not found' });
+    const uid = String(doc._id);
+    const role = doc.role as 'student'|'alumni'|'admin'|'super_admin';
+    const adminAuth = getAdminAuth();
+
+    // Ensure Firebase user exists (create if missing)
+    try {
+      await adminAuth.getUser(uid);
+    } catch {
+      await adminAuth.createUser({ uid, email: doc.email || undefined, displayName: doc.name || undefined, photoURL: doc.profilePicture || undefined });
+    }
+    // Sync custom claims for role
+    await adminAuth.setCustomUserClaims(uid, { role });
+
+    // Mirror selected profile fields to Firestore for realtime UI
+    try {
+      const db = getAdminFirestore();
+      await db.doc(`users/${uid}`).set({
+        name: doc.name || '',
+        email: doc.email || '',
+        avatar: doc.profilePicture || '',
+        profilePicture: doc.profilePicture || '',
+        currentCompany: doc.currentCompany || '',
+        profileHeadline: doc.profileHeadline || '',
+        location: doc.location || '',
+        experienceYears: doc.experienceYears || 0,
+        skills: Array.isArray(doc.skills) ? doc.skills : String(doc.skills || '').split(',').map((s: string)=>s.trim()).filter(Boolean),
+        mentorEligible: !!doc.mentorEligible,
+        role,
+        updatedAt: new Date(),
+      }, { merge: true });
+    } catch {}
+
+    const token = await adminAuth.createCustomToken(uid);
+    return res.json({ token });
+  } catch (e: any) {
+    console.error('[firebase:custom-token] error', e);
+    return res.status(500).json({ error: 'Failed to create custom token' });
+  }
 });
 
 // LinkedIn OAuth 2.0
