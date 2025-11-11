@@ -342,8 +342,15 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
             <Menu className="h-5 w-5" />
           </Button>
           
-          <div className="flex items-center gap-2">
-            <img src="/logo1.png" alt="Logo" className="h-10 w-auto md:h-14 max-h-16 rounded transition-transform duration-200 hover:scale-105 object-contain" />
+          <div
+            className="flex items-center gap-2 cursor-pointer select-none"
+            onClick={() => navigate({ pathname: "/" })}
+            role="button"
+            aria-label="Go to homepage"
+            title="Home"
+          >
+            <img src="/logo1.png" alt="Logo" className="h-9 w-auto md:h-12 max-h-16 rounded transition-transform duration-200 hover:scale-105 object-contain" />
+            <span className="text-xl font-semibold tracking-tight">AlumSphere</span>
           </div>
         </div>
 
