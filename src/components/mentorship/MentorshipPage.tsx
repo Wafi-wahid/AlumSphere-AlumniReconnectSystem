@@ -172,6 +172,21 @@ export function MentorshipPage() {
     }
     try {
       setSubmitting(true);
+      // Resolve mentor Mongo ID (server-side directory) from the selected mentor card (which may be Firestore-sourced)
+      let mentorMongoId = String(selectedMentor.id);
+      try {
+        const searchName = String(selectedMentor.name || '').trim();
+        const res = await MentorshipAPI.listMentors({ q: searchName });
+        const lower = (s: string) => String(s || '').trim().toLowerCase();
+        const exact = (res.items || []).find((m: any) => lower(m.name) === lower(selectedMentor.name));
+        const byCompany = exact || (res.items || []).find((m: any) => lower(m.name) === lower(selectedMentor.name) && (!!selectedMentor.company ? lower(m.currentCompany) === lower(selectedMentor.company) : true));
+        if (byCompany?.id) {
+          mentorMongoId = String(byCompany.id);
+        } else if ((res.items || [])[0]?.id) {
+          mentorMongoId = String(res.items[0].id);
+        }
+      } catch {}
+
       const preferredDateTime = new Date(`${requestForm.preferredDate}T${requestForm.preferredTime}:00`).toISOString();
       const allowedDurations = ['30m','45m','60m'] as const;
       const isAllowed = (v: string): v is typeof allowedDurations[number] => (allowedDurations as readonly string[]).includes(v);
@@ -179,7 +194,7 @@ export function MentorshipPage() {
       const extraPref = !isAllowed(requestForm.sessionType) && requestForm.sessionType ? ` [preference: ${requestForm.sessionType}]` : '';
       const notesCombined = `${requestForm.outline || ''}${extraPref}`.trim();
       await MentorshipAPI.createRequest({
-        mentorId: String(selectedMentor.id),
+        mentorId: mentorMongoId,
         topic: topicValue,
         sessionType: apiSessionType,
         preferredDateTime,
@@ -356,7 +371,7 @@ export function MentorshipPage() {
 
         <TabsContent value="find" className="space-y-4">
           {/* Search + Filter toggle */}
-          <Card className="rounded-2xl bg-background border border-border dark:border-0 dark:bg-white/5">
+          <Card className="rounded-2xl bg-background border border-[#0D47A1] dark:border-0 dark:bg-white/5">
             <CardContent className="p-6 space-y-4" ref={searchSectionRef}>
               <div className="flex flex-col md:flex-row gap-3">
                 <div className="relative flex-1">
@@ -365,7 +380,7 @@ export function MentorshipPage() {
                     placeholder="Search mentors by name, expertise, or company"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 bg-background text-foreground placeholder:text-muted-foreground border border-border focus-visible:ring-2 focus-visible:ring-ring dark:border-white/20 dark:bg-white/5 dark:text-white dark:placeholder:text-white/70 dark:focus-visible:ring-white/40"
+                    className="pl-10 bg-background text-foreground placeholder:text-muted-foreground border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1] dark:bg-white/5 dark:text-white dark:placeholder:text-white/70"
                   />
                 </div>
                 <div className="flex flex-col gap-2 w-full md:w-auto">
@@ -376,7 +391,7 @@ export function MentorshipPage() {
               </div>
               <div className={`grid grid-cols-1 md:grid-cols-6 gap-4 overflow-hidden transition-all duration-300 ${showFilters ? 'max-h-[320px] opacity-100' : 'max-h-0 opacity-0'}`}>
                 <Select value={skill} onValueChange={setSkill}>
-                  <SelectTrigger className="border border-border bg-background text-foreground dark:border-white/20 dark:bg-white/5 dark:text-white">
+                  <SelectTrigger className="bg-background text-foreground border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1] dark:bg-white/5 dark:text-white">
                     <SelectValue placeholder="Skill" />
                   </SelectTrigger>
                   <SelectContent>
@@ -386,7 +401,7 @@ export function MentorshipPage() {
                   </SelectContent>
                 </Select>
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger className="border border-border bg-background text-foreground dark:border-white/20 dark:bg-white/5 dark:text-white">
+                  <SelectTrigger className="bg-background text-foreground border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1] dark:bg-white/5 dark:text-white">
                     <SelectValue placeholder="Role" />
                   </SelectTrigger>
                   <SelectContent>
@@ -399,10 +414,10 @@ export function MentorshipPage() {
                   placeholder="Company"
                   value={companyFilter}
                   onChange={(e) => setCompanyFilter(e.target.value)}
-                  className="bg-background text-foreground placeholder:text-muted-foreground border border-border dark:border-white/20 dark:bg-white/5 dark:text-white dark:placeholder:text-white/70"
+                  className="bg-background text-foreground placeholder:text-muted-foreground border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1] dark:bg-white/5 dark:text-white dark:placeholder:text-white/70"
                 />
                 <Select value={department} onValueChange={setDepartment}>
-                  <SelectTrigger className="border border-border bg-background text-foreground dark:border-white/20 dark:bg-white/5 dark:text-white">
+                  <SelectTrigger className="bg-background text-foreground border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1] dark:bg-white/5 dark:text-white">
                     <SelectValue placeholder="Department" />
                   </SelectTrigger>
                   <SelectContent>
@@ -413,7 +428,7 @@ export function MentorshipPage() {
                   </SelectContent>
                 </Select>
                 <Select value={ratingMin} onValueChange={setRatingMin}>
-                  <SelectTrigger className="border border-border bg-background text-foreground dark:border-white/20 dark:bg-white/5 dark:text-white">
+                  <SelectTrigger className="bg-background text-foreground border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1] dark:bg-white/5 dark:text-white">
                     <SelectValue placeholder="Rating" />
                   </SelectTrigger>
                   <SelectContent>
@@ -487,8 +502,7 @@ export function MentorshipPage() {
                       <Button
                         aria-label="Message"
                         size="sm"
-                        variant="outline"
-                        className="flex-1 border border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400"
+                        className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white border-0"
                         onClick={() => {
                           const params = new URLSearchParams({ tab: 'messages', to: String(mentor.id), toName: String(mentor.name || 'User') });
                           navigate({ pathname: '/', search: `?${params.toString()}` });
@@ -496,74 +510,7 @@ export function MentorshipPage() {
                       >
                         <MessageCircle className="h-4 w-4" />
                       </Button>
-                      {(() => {
-                        const id = String(mentor.id);
-                        const isConnected = acceptedIds.has(id);
-                        const isSent = sentRequests.has(id);
-                        if (!user?.id || id === String(user.id)) {
-                          return (
-                            <Button size="sm" className="flex-1" disabled>
-                              Connect
-                            </Button>
-                          );
-                        }
-                        if (isConnected) {
-                          return (
-                            <Button size="sm" variant="outline" className="flex-1" onClick={async () => {
-                              try { await deleteDoc(doc(db, 'connections', String(user.id), 'accepted', id)); } catch {}
-                              try { await deleteDoc(doc(db, 'connections', id, 'accepted', String(user.id))); } catch {}
-                              toast({ title: 'Connection removed' });
-                            }}>
-                              Remove Connection
-                            </Button>
-                          );
-                        }
-                        if (isSent) {
-                          return (
-                            <Button size="sm" variant="outline" className="flex-1" onClick={async () => {
-                              try { await deleteDoc(doc(db, 'connections', String(user.id), 'sent', id)); } catch {}
-                              try { await deleteDoc(doc(db, 'connections', id, 'requests', String(user.id))); } catch {}
-                              toast({ title: 'Request cancelled' });
-                            }}>
-                              Cancel Request
-                            </Button>
-                          );
-                        }
-                        return (
-                          <Button size="sm" className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-[#0A1A3D]" onClick={async () => {
-                            const authInst = getAuth();
-                            let authUid = authInst.currentUser?.uid;
-                            if (!authUid) {
-                              try { await signInAnonymously(authInst); authUid = authInst.currentUser?.uid; } catch {}
-                            }
-                            if (!authUid) { toast({ title: 'Not signed in' }); return; }
-                            if (authUid === id) { toast({ title: 'You cannot connect to yourself' }); return; }
-                            try {
-                              // recipient inbox: requests/{senderAuthUid}
-                              await setDoc(doc(db, 'connections', id, 'requests', authUid), {
-                                id: authUid, // senderAuthUid
-                                senderMongoId: String(user?.id || ''),
-                                name: user?.name || 'User',
-                                avatar: user?.avatar || '',
-                                createdAt: new Date(),
-                              });
-                              // sender outbox: sent/{recipientMongoId}
-                              await setDoc(doc(db, 'connections', authUid, 'sent', id), {
-                                id, // recipientMongoId
-                                recipientMongoId: id,
-                                recipientName: mentor?.name || 'Alumni',
-                                recipientAvatar: mentor?.avatar || '',
-                                createdAt: new Date(),
-                              });
-                              toast({ title: 'Connection request sent' });
-                            } catch (e:any) {
-                              toast({ title: 'Failed to send request', description: e?.message || '' });
-                            }
-                          }}>
-                            Connect
-                          </Button>
-                        );
-                      })()}
+                      
                       <Button
                         size="sm"
                         className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-[#0A1A3D]"
@@ -712,8 +659,7 @@ export function MentorshipPage() {
             {/* Sticky footer */}
             <div className="sticky bottom-0 w-full border-t border-white/10 p-4 flex gap-3 justify-end" style={{ backgroundColor: "#0A1A3D" }}>
               <Button
-                variant="outline"
-                className="bg-transparent border-green-400 text-white hover:bg-green-900/20 hover:border-green-500"
+                className="bg-[#25D366] hover:bg-[#128C7E] text-white border-0"
                 onClick={() => {
                   if (!selectedMentor) return;
                   const me = String(user?.id || '');

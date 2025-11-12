@@ -673,7 +673,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong min-h-[260px] flex flex-col overflow-hidden" style={{ height: rightColHeight ? rightColHeight : undefined }}>
+        <Card className="lg:col-span-2 rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong min-h-[260px] flex flex-col overflow-hidden border border-[#0D47A1]" style={{ height: rightColHeight ? rightColHeight : undefined }}>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2"><Bolt className="h-5 w-5" /> Today's Mission</CardTitle>
             <CardDescription>Complete tasks to get badges</CardDescription>
@@ -726,14 +726,14 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
         </Card>
 
         <div className="space-y-6" ref={rightColRef}>
-          <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong h-24 md:h-20">
+          <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong h-24 md:h-20 border border-[#0D47A1]">
             <CardContent className="px-4 py-3 h-full flex items-center">
               {user?.role === 'alumni' ? (
                 <div className="flex items-center gap-3 w-full">
                   <Trophy className="h-6 w-6 text-yellow-500" />
                   <div className="space-y-0.5 flex-1 min-w-0">
                     <div className="text-sm font-semibold">Share your story on Wall of Fame</div>
-                    <div className="text-xs text-muted-foreground">Inspire students with your journey and tips.</div>
+                    {/* subtitle removed per requirement */}
                   </div>
                   <Button size="sm" className="shrink-0" onClick={() => onNavigate('wallOfFame')}>Share</Button>
                 </div>
@@ -749,7 +749,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
             </CardContent>
           </Card>
           {user?.role === 'alumni' ? (
-            <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border bg-background">
+            <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border border-[#0D47A1] bg-background">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Mentorship Requests</CardTitle>
                 <CardDescription>Students seeking your guidance</CardDescription>
@@ -773,7 +773,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                   </div>
                 ))}
                 <Button
-                  className="w-full mt-1 transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
+                  className="w-full mt-1 transition-transform hover:scale-[1.02] text-white border-0 bg-[#0D47A1] hover:bg-[#0B3C89]"
                   onClick={() => onNavigate('mentorship')}
                 >
                   See more
@@ -781,7 +781,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
               </CardContent>
             </Card>
           ) : (
-            <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border bg-background">
+            <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border border-[#0D47A1] bg-background">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Featured Mentors</CardTitle>
                 <CardDescription>Top mentor</CardDescription>
@@ -813,7 +813,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                   </div>
                 ))}
                 <Button
-                  className="w-full mt-1 text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
+                  className="w-full mt-1 text-white border-0 bg-[#0D47A1] hover:bg-[#0B3C89]"
                   onClick={() => onNavigate('mentorship')}
                 >
                   See more
@@ -828,7 +828,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
       
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
+        <Card className="lg:col-span-2 rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border border-[#0D47A1]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5" /> Your Activity Analytics</CardTitle>
             <CardDescription>See your activity analytics</CardDescription>
@@ -951,7 +951,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
+        <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border border-[#0D47A1]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Target className="h-5 w-5" /> Badges</CardTitle>
             <CardDescription>Your achievements</CardDescription>
@@ -1062,7 +1062,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
             ))}
             <Button
               variant="brand"
-              className="w-full transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]"
+              className="w-full transition-transform hover:scale-[1.02] text-white border-0 bg-[#0D47A1] hover:bg-[#0B3C89]"
               onClick={() => onNavigate('events')}
             >
               View all events
@@ -1071,7 +1071,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
         </Card>
 
         {/* Featured Job Opportunities */}
-        <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border bg-background">
+        <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border border-[#0D47A1] bg-background">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Briefcase className="h-5 w-5" />
@@ -1134,7 +1134,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 </div>
               </div>
             ))}
-            <Button variant="brand" className="w-full transition-transform hover:scale-[1.02] text-white border-0 bg-[#1e3a8a] hover:bg-[#60a5fa]" onClick={() => onNavigate("careers")}> 
+            <Button variant="brand" className="w-full transition-transform hover:scale-[1.02] text-white border-0 bg-[#0D47A1] hover:bg-[#0B3C89]" onClick={() => onNavigate("careers")}> 
               {user?.role === 'alumni' ? 'Manage jobs' : 'View All Jobs'}
             </Button>
           </CardContent>

@@ -15,7 +15,7 @@ import { useAuth } from "@/store/auth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { db, auth } from "@/lib/firebase";
-import { collection, onSnapshot, query, where, updateDoc, setDoc, doc, arrayUnion, getDoc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, where, updateDoc, setDoc, doc, arrayUnion, getDoc, deleteDoc, orderBy } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 interface HeaderProps {
@@ -35,7 +35,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
   const { toast } = useToast();
   const [conversations, setConversations] = useState<any[]>([]);
   const lastUpdatesRef = useRef<Record<string, number>>({});
-  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; body?: string; convId?: string; createdAt: number }>>([]);
+  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; body?: string; convId?: string; type?: string; jobId?: string; link?: string; createdAt: number }>>([]);
   const [incomingCall, setIncomingCall] = useState<null | { convId: string; type: 'audio' | 'video'; fromName: string; toName?: string }>(null);
   const [incomingRequests, setIncomingRequests] = useState<Array<{ id: string; senderMongoId?: string; name?: string; avatar?: string; createdAt?: any }>>([]);
   const ringCtxRef = useRef<AudioContext | null>(null);
@@ -110,6 +110,32 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
       } else {
         setIncomingCall(null);
       }
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // Job referral notifications (inbox): notifications/{myMongoId}/items ordered by createdAt
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'notifications', String(user.id), 'items'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const jobs = items.filter((it:any) => String(it.type) === 'job_referral').map((it:any) => ({
+        id: `jobref_${it.id}`,
+        title: `Job referred: ${it.jobTitle || 'An opportunity'}`,
+        body: it.company || undefined,
+        type: 'job_referral' as const,
+        jobId: String(it.jobId || ''),
+        link: it.link || undefined,
+        createdAt: Date.now(),
+      }));
+      // Merge with existing without duplicating jobref ids
+      setNotifications((prev) => {
+        const prevMap = new Map(prev.map(p => [p.id, p]));
+        jobs.forEach(j => prevMap.set(j.id, j));
+        return Array.from(prevMap.values()).sort((a,b) => b.createdAt - a.createdAt).slice(0, 30);
+      });
     });
     return () => unsub();
   }, [user?.id]);
@@ -235,7 +261,12 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     navigate({ pathname: "/", search: `?${params.toString()}` });
   };
 
-  const openNotification = (n: { convId?: string }) => {
+  const openNotification = (n: { convId?: string; type?: string; jobId?: string; link?: string }) => {
+    if (n.type === 'job_referral') {
+      const params = new URLSearchParams({ tab: 'careers', ...(n.jobId ? { job: String(n.jobId) } : {}) });
+      navigate({ pathname: '/', search: `?${params.toString()}` });
+      return;
+    }
     if (n.convId) {
       const conv = conversations.find((c) => c.id === n.convId);
       if (conv) openConversation(conv);

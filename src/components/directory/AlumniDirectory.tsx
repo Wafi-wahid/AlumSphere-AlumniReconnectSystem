@@ -521,7 +521,7 @@ export function AlumniDirectory() {
       </Card>
 
       {/* Search and Filters */}
-      <Card className="border-yellow-400">
+      <Card className="border-[#0D47A1]">
         <CardContent className="p-6 space-y-4" ref={searchSectionRef}>
           <div className="flex gap-4">
             <div className="flex-1 relative">
@@ -530,7 +530,7 @@ export function AlumniDirectory() {
                 placeholder="Search by name"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 border-yellow-400 focus-visible:ring-yellow-400"
+                className="pl-10 border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1]"
               />
             </div>
             <div className="flex gap-2">
@@ -559,11 +559,11 @@ export function AlumniDirectory() {
           {showAdvanced && (
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 pt-2">
               <Select value={filters.year} onValueChange={(value) => setFilters(prev => ({ ...prev, year: value }))}>
-                <SelectTrigger>
+                <SelectTrigger className="border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1]">
                   <SelectValue placeholder="Graduation Year" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Years</SelectItem>
+                  <SelectItem value="all">Year</SelectItem>
                   {filterOptions.years.map((y) => (
                     <SelectItem key={y} value={y}>{y}</SelectItem>
                   ))}
@@ -571,11 +571,11 @@ export function AlumniDirectory() {
               </Select>
 
               <Select value={filters.department} onValueChange={(value) => setFilters(prev => ({ ...prev, department: value }))}>
-                <SelectTrigger>
+                <SelectTrigger className="border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1]">
                   <SelectValue placeholder="Department" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
+                  <SelectItem value="all">Departments</SelectItem>
                   {filterOptions.departments.map((d) => (
                     <SelectItem key={d} value={d}>{d}</SelectItem>
                   ))}
@@ -583,33 +583,33 @@ export function AlumniDirectory() {
               </Select>
 
               <Select value={filters.location} onValueChange={(value) => setFilters(prev => ({ ...prev, location: value }))}>
-                <SelectTrigger>
+                <SelectTrigger className="border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1]">
                   <SelectValue placeholder="Location" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Locations</SelectItem>
+                  <SelectItem value="all">Locations</SelectItem>
                   {filterOptions.locations.map((l) => (
                     <SelectItem key={l} value={l}>{l}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <Select value={filters.company || 'all'} onValueChange={(value) => setFilters((prev) => ({ ...prev, company: value }))}>
-                <SelectTrigger>
+                <SelectTrigger className="border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1]">
                   <SelectValue placeholder="Company" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Companies</SelectItem>
+                  <SelectItem value="all">Companies</SelectItem>
                   {filterOptions.companies.map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <Select value={filters.skill || 'all'} onValueChange={(value) => setFilters((prev) => ({ ...prev, skill: value }))}>
-                <SelectTrigger>
+                <SelectTrigger className="border-[#0D47A1] focus-visible:ring-2 focus-visible:ring-[#0D47A1]">
                   <SelectValue placeholder="Skill" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Skills</SelectItem>
+                  <SelectItem value="all">Skills</SelectItem>
                   {filterOptions.skills.map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
@@ -664,8 +664,8 @@ export function AlumniDirectory() {
               className="border border-blue-400 hover:border-blue-500 hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.01] transition-transform transition-shadow duration-200 cursor-pointer group rounded-xl h-full"
               style={{ transitionDelay: `${Math.min(idx, 12) * 20}ms` }}
             >
-              <CardContent className="p-6 space-y-4 h-full flex flex-col">
-                <div className="flex items-start gap-4">
+              <CardContent className="p-6 space-y-4 h-full min-h-[260px] flex flex-col">
+                <div className="flex items-start gap-4 flex-1">
                   <Avatar className="h-16 w-16 ring-1 ring-border group-hover:ring-primary/40 transition">
                     <AvatarImage src={alumni.avatar} alt={alumni.name} />
                     <AvatarFallback>
@@ -698,15 +698,14 @@ export function AlumniDirectory() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 mt-auto">
+                <div className="flex gap-2 mt-auto pt-2">
                   <Button size="sm" variant="outline" className="flex-1 bg-yellow-400 text-black hover:bg-yellow-300 border-0" onClick={() => setViewing(alumni)}>
                     View Profile
                   </Button>
                   <Button
                     aria-label="Message"
                     size="sm"
-                    variant="outline"
-                    className="flex-1 border border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400"
+                    className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white border-0"
                     onClick={() => {
                       const me = String(user?.id || '');
                       const other = String(alumni.id);
@@ -730,7 +729,7 @@ export function AlumniDirectory() {
                     }
                     if (isConnected) {
                       return (
-                        <Button size="sm" variant="outline" className="flex-1" onClick={async () => {
+                        <Button size="sm" className="flex-1 bg-red-600 hover:bg-red-700 text-white border-0" onClick={async () => {
                           try { await deleteDoc(doc(db, 'connections', user.id, 'accepted', id)); } catch {}
                           try { await deleteDoc(doc(db, 'connections', id, 'accepted', user.id)); } catch {}
                           toast.message('Connection removed');
@@ -751,7 +750,7 @@ export function AlumniDirectory() {
                       );
                     }
                     return (
-                      <Button size="sm" className="flex-1 text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={async () => {
+                      <Button size="sm" className="flex-1 text-white border-0 bg-[#0D47A1] hover:bg-[#0B3C89]" onClick={async () => {
                         const authUid = getAuth().currentUser?.uid || String(user?.id || "");
                         if (!authUid) { toast.error('Not signed in'); return; }
                         if (authUid === id) { toast.message('You cannot connect to yourself'); return; }
@@ -859,8 +858,7 @@ export function AlumniDirectory() {
                       <Button
                         aria-label="Message"
                         size="sm"
-                        variant="outline"
-                        className="border border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400"
+                        className="bg-[#25D366] hover:bg-[#128C7E] text-white border-0"
                         onClick={() => {
                           const params = new URLSearchParams({ tab: 'messages', to: String(viewing.id), toName: String(viewing.name || 'User') });
                           navigate({ pathname: '/', search: `?${params.toString()}` });
