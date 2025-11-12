@@ -173,7 +173,7 @@ export function EventsPage() {
   useEffect(() => {
     if (!user?.id) return;
     const unsub = onSnapshot(collectionGroup(db, 'rsvps'), (snap) => {
-      const mine = snap.docs.filter((d) => d.id === user.id);
+      const mine = snap.docs.filter((d) => d.id === user.id && (d.data() as any)?.status === 'registered');
       const ids = new Set<string>();
       for (const d of mine) {
         const parentEventRef = d.ref.parent.parent;
@@ -299,7 +299,11 @@ export function EventsPage() {
       if (status) {
         await setDoc(rsvpRef, { status, updatedAt: new Date() });
       } else {
-        await setDoc(rsvpRef, { status: null, updatedAt: new Date() });
+        // remove RSVP document so My Events no longer shows it
+        await import('firebase/firestore').then(async (m) => {
+          const { deleteDoc } = m;
+          await deleteDoc(rsvpRef);
+        });
       }
     } catch {}
   };
@@ -721,9 +725,9 @@ export function EventsPage() {
                       <div className="flex gap-2">
                         {event.rsvpStatus === null ? (
                           <>
-                            <Button size="sm" className="text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => handleRSVP(event.id, 'going')}>
+                            <Button size="sm" className="text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => handleRSVP(event.id, 'registered')}>
                               <CheckCircle className="h-4 w-4 mr-2" />
-                              I'm Going
+                              Register
                             </Button>
                             <Button size="sm" variant="outline" onClick={() => handleRSVP(event.id, 'interested')}>
                               <Star className="h-4 w-4 mr-2" />
@@ -734,14 +738,14 @@ export function EventsPage() {
                           <div className="flex items-center gap-2">
                             <Badge variant="default" className="gap-1">
                               <CheckCircle className="h-3 w-3" />
-                              {event.rsvpStatus === 'going' ? "You're Going" : "Interested"}
+                              {event.rsvpStatus === 'registered' ? 'Registered' : 'Interested'}
                             </Badge>
                             <Button size="sm" variant="outline" onClick={() => handleRSVP(event.id, null)}>
                               Cancel RSVP
                             </Button>
                           </div>
                         )}
-                        <Button size="sm" variant="ghost" onClick={() => setSelectedEventId(String(event.id))}>View Details</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setSelectedEventId(String(event.id))}>View detail</Button>
                       </div>
                     </div>
                   </div>
@@ -896,12 +900,12 @@ export function EventsPage() {
         </DialogContent>
       </Dialog>
 
-      {selectedEventId && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Event Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+      <Dialog open={!!selectedEventId} onOpenChange={(open) => { if (!open) setSelectedEventId(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Event Details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
             {events.filter((e) => String(e.id) === String(selectedEventId)).map((e) => (
               <div key={e.id} className="space-y-2">
                 <div className="text-xl font-semibold">{e.title}</div>
@@ -910,15 +914,15 @@ export function EventsPage() {
                 <div className="text-sm">Category: {e.category}</div>
                 <div className="text-sm">{e.description}</div>
                 <div className="flex gap-2 pt-2">
-                  <Button size="sm" className="text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => handleRSVP(e.id, 'going')}>I'm Going</Button>
+                  <Button size="sm" className="text-primary-foreground border-0 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-light))]" onClick={() => handleRSVP(e.id, 'registered')}>Register</Button>
                   <Button size="sm" variant="outline" onClick={() => handleRSVP(e.id, 'interested')}>Interested</Button>
                   <Button size="sm" variant="ghost" onClick={() => setSelectedEventId(null)}>Close</Button>
                 </div>
               </div>
             ))}
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

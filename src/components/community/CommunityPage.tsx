@@ -371,7 +371,7 @@ export function CommunityPage() {
       {/* Feed: show dummy (if any) + latest real posts */}
       <div className="space-y-4">
         {dummy && (
-          <Card key={dummy.id} className="hover:shadow-md transition-shadow border-dashed">
+          <Card key={dummy.id} className="hover:shadow-md transition-shadow border border-[#0D47A1] border-dashed">
             <CardContent className="p-6 space-y-4">
               <div className="flex gap-3">
                 <Avatar className="h-12 w-12">
@@ -400,7 +400,7 @@ export function CommunityPage() {
           const pinnedFirst = [...(post.comments || [])].sort((a, b) => (a.isAuthor === b.isAuthor ? 0 : a.isAuthor ? -1 : 1));
           const liked = userLiked(post.id);
           return (
-            <Card key={post.id} className="hover:shadow-md transition-shadow">
+            <Card key={post.id} className="hover:shadow-md transition-shadow border border-[#0D47A1]">
               <CardContent className="p-6 space-y-4">
                 {/* Post Header */}
                 <div className="flex gap-3">
@@ -458,7 +458,14 @@ export function CommunityPage() {
                       <Heart className="h-4 w-4" />
                       <span className="text-sm">{post.likes?.length ?? 0}</span>
                     </Button>
-                    <Button variant="ghost" size="sm" className="gap-2" onClick={() => handleMessageAuthor(post)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => handleMessageAuthor(post)}
+                      disabled={String(user?.id || '') === String(post.authorId || '')}
+                      title={String(user?.id || '') === String(post.authorId || '') ? 'You cannot message yourself' : undefined}
+                    >
                       <MessageSquareText className="h-4 w-4" />
                       Message
                     </Button>

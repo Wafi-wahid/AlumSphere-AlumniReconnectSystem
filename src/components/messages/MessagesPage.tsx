@@ -175,6 +175,7 @@ export function MessagesPage() {
   const [callStatus, setCallStatus] = useState<"idle" | "connecting" | "connected" | "ended">("idle");
   const [audioMuted, setAudioMuted] = useState(false);
   const [videoMuted, setVideoMuted] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<any | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -267,7 +268,28 @@ export function MessagesPage() {
       setCallType(type);
       setCallOpen(true);
       setCallStatus("connecting");
-      const media = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === "video" });
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast({ title: "Media not supported", description: "Camera/Mic not available. Use a supported browser over HTTPS.", variant: "destructive" as any });
+        setCallOpen(false);
+        setIsCaller(false);
+        return;
+      }
+      let media: MediaStream;
+      try {
+        media = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === "video" });
+      } catch (e: any) {
+        const code = e?.name || e?.code || "PermissionError";
+        const msg =
+          code === 'NotAllowedError' ? 'Permission denied. Allow microphone/camera access in your browser.' :
+          code === 'NotFoundError' ? 'No microphone/camera found. Plug in a device and try again.' :
+          code === 'NotReadableError' ? 'Device is in use by another app. Close it and retry.' :
+          code === 'SecurityError' ? 'Camera/Mic blocked by browser security. Use HTTPS and allow permissions.' :
+          'Unable to access camera/microphone.';
+        toast({ title: 'Call failed', description: msg, variant: 'destructive' as any });
+        setCallOpen(false);
+        setIsCaller(false);
+        return;
+      }
       localStreamRef.current = media;
       attachLocal(media);
       setAudioMuted(false);
@@ -277,17 +299,24 @@ export function MessagesPage() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       const convRef = doc(db, "conversations", selectedConversation.id);
-      await setDoc(convRef, {
-        call: {
-          status: "ringing",
-          type,
-          fromId: user.id,
-          fromName: user.name,
-          toId: otherParticipantId,
-          offer,
-          startedAt: serverTimestamp(),
-        },
-      }, { merge: true });
+      try {
+        await setDoc(convRef, {
+          call: {
+            status: "ringing",
+            type,
+            fromId: user.id,
+            fromName: user.name,
+            toId: otherParticipantId,
+            offer,
+            startedAt: serverTimestamp(),
+          },
+        }, { merge: true });
+      } catch (e: any) {
+        const msg = e?.code === 'permission-denied' ? 'You do not have permission to start calls. Please contact admin.' : (e?.message || 'Failed to initiate call');
+        toast({ title: 'Call failed', description: msg, variant: 'destructive' as any });
+        await cleanupCall();
+        return;
+      }
 
       // Listen for answer and callee ICE and call status updates (caller side)
       unsubCallDocRef.current = onSnapshot(convRef, async (snap) => {
@@ -326,30 +355,35 @@ export function MessagesPage() {
     }
   };
 
-  // Incoming call watcher for the open conversation only (MVP)
+  // Incoming call watcher for the open conversation only (shows visible banner)
   useEffect(() => {
     if (!selectedConversation?.id || !user?.id) return;
     const convRef = doc(db, "conversations", selectedConversation.id);
     const unsub = onSnapshot(convRef, (snap) => {
       const data: any = snap.data();
       const call = data?.call;
-      if (call?.status === "ringing" && call.toId === user.id && !isCaller && !callOpen) {
-        // show accept UI via toast; keep it simple
-        toast({ title: `Incoming ${call.type} call`, description: `From ${call.fromName}` });
-      }
-      if (call?.status === 'accepted' && !isCaller) {
-        // Callee accepted; status handled by acceptCall flow
+      if (call?.status === "ringing" && call.toId === user.id && !isCaller) {
+        setIncomingCall(call);
+        if (!callOpen) {
+          // Also show toast for extra visibility
+          toast({ title: `Incoming ${call.type} call`, description: `From ${call.fromName}` });
+        }
+      } else {
+        setIncomingCall(null);
       }
       if (call?.status === 'declined') {
         toast({ title: 'Call declined' });
+        setIncomingCall(null);
         if (callOpen) cleanupCall();
       }
       if (call?.status === 'ended') {
         toast({ title: 'Call ended' });
+        setIncomingCall(null);
         if (callOpen) cleanupCall();
       }
       if (!call && callOpen) {
         toast({ title: 'Call ended' });
+        setIncomingCall(null);
         cleanupCall();
       }
     });
@@ -404,7 +438,26 @@ export function MessagesPage() {
       setCallType((call.type as any) || "audio");
       setCallOpen(true);
       setCallStatus("connecting");
-      const media = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.type === "video" });
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast({ title: "Media not supported", description: "Camera/Mic not available. Use a supported browser over HTTPS.", variant: "destructive" as any });
+        setCallOpen(false);
+        return;
+      }
+      let media: MediaStream;
+      try {
+        media = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.type === "video" });
+      } catch (e: any) {
+        const code = e?.name || e?.code || "PermissionError";
+        const msg =
+          code === 'NotAllowedError' ? 'Permission denied. Allow microphone/camera access in your browser.' :
+          code === 'NotFoundError' ? 'No microphone/camera found.' :
+          code === 'NotReadableError' ? 'Device is busy in another app.' :
+          code === 'SecurityError' ? 'Camera/Mic blocked by browser. Use HTTPS and allow permissions.' :
+          'Unable to access camera/microphone.';
+        toast({ title: 'Cannot answer call', description: msg, variant: 'destructive' as any });
+        setCallOpen(false);
+        return;
+      }
       localStreamRef.current = media;
       attachLocal(media);
       setAudioMuted(false);
@@ -414,7 +467,14 @@ export function MessagesPage() {
       await pc.setRemoteDescription(new RTCSessionDescription(call.offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      await setDoc(convRef, { call: { ...call, status: "accepted", answer } }, { merge: true });
+      try {
+        await setDoc(convRef, { call: { ...call, status: "accepted", answer } }, { merge: true });
+      } catch (e: any) {
+        const msg = e?.code === 'permission-denied' ? 'No permission to accept calls. Please contact admin.' : (e?.message || 'Failed to accept call');
+        toast({ title: 'Cannot answer call', description: msg, variant: 'destructive' as any });
+        await cleanupCall();
+        return;
+      }
       toast({ title: 'Call accepted' });
 
       // Subscribe to caller ICE and call status to react to hangup
@@ -540,7 +600,7 @@ export function MessagesPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
         {/* Conversations List */}
-        <Card className="lg:col-span-1">
+        <Card className="lg:col-span-1 border border-[#0D47A1]">
           <CardContent className="p-4 space-y-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -557,7 +617,7 @@ export function MessagesPage() {
                 {conversations.map((conversation) => (
                   <Card
                     key={conversation.id}
-                    className={`cursor-pointer hover:bg-muted/50 transition-colors ${
+                    className={`cursor-pointer hover:bg-muted/50 transition-colors border border-[#0D47A1] ${
                       selectedConversation?.id === conversation.id ? "bg-muted" : ""
                     }`}
                     onClick={() => setSelectedConversation(conversation)}
@@ -592,7 +652,7 @@ export function MessagesPage() {
         </Card>
 
         {/* Chat Window */}
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 border border-[#0D47A1]">
           <CardContent className="p-0 flex flex-col h-full">
             {!selectedConversation ? (
               <div className="flex-1 grid place-items-center text-muted-foreground">
@@ -644,6 +704,19 @@ export function MessagesPage() {
               </div>
             </div>
 
+            {/* Incoming Call Banner */}
+            {incomingCall && (
+              <div className="p-3 border-b border-[#0D47A1] bg-blue-50 flex items-center justify-between">
+                <div className="text-sm">
+                  Incoming {incomingCall.type} call from <span className="font-medium">{incomingCall.fromName || 'User'}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={acceptCall}>Accept</Button>
+                  <Button size="sm" variant="outline" onClick={declineCall}>Decline</Button>
+                </div>
+              </div>
+            )}
+
             {/* Messages */}
             <ScrollArea className="flex-1 p-4">
               <div className="space-y-4">
@@ -651,7 +724,7 @@ export function MessagesPage() {
                   const fromMe = m.senderId === user?.id;
                   return (
                     <div key={m.id} className={`flex ${fromMe ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[70%] rounded-lg p-3 ${fromMe ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                      <div className={`max-w-[70%] rounded-lg p-3 border border-[#0D47A1] ${fromMe ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                         <p className="text-sm">{m.text}</p>
                       </div>
                     </div>
@@ -673,7 +746,7 @@ export function MessagesPage() {
                       handleSendMessage();
                     }
                   }}
-                  className="min-h-[60px] resize-none"
+                  className="min-h-[60px] resize-none border border-[#0D47A1] focus-visible:ring-[#0D47A1]"
                 />
                 <Button onClick={handleSendMessage}>
                   <Send className="h-4 w-4" />

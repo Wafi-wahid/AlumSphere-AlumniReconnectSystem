@@ -241,26 +241,7 @@ export default function Register() {
                 </div>
                 <h1 className="mt-6 text-4xl font-bold tracking-tight text-white">Connect with 2000+ Riphah Alumni</h1>
                 <p className="mt-2 text-white/90 text-base">Build your career with mentorship, networking, and referral support.</p>
-                <div className="mt-5 relative pl-6">
-                  <ul className="space-y-2 text-white text-sm">
-                    <li className="relative">
-                      <span className="absolute left-0 top-2 h-3 w-3 rounded-half bg-[#FDBA01]" />
-                      Real-time networking
-                    </li>
-                    <li className="relative">
-                      <span className="absolute left-0 top-2 h-3 w-3 rounded-full bg-[#FDBA01]" />
-                      Career opportunities
-                    </li>
-                    <li className="relative">
-                      <span className="absolute left-0 top-2 h-3 w-3 rounded-full bg-[#FDBA01]" />
-                      Directory of verified alumni
-                    </li>
-                    <li className="relative">
-                      <span className="absolute left-0 top-2 h-3 w-3 rounded-full bg-[#FDBA01]" />
-                      Mentorship from alumni
-                    </li>
-                  </ul>
-                </div>
+                {/* removed benefits bullets per requirement */}
               </div>
               <div className="mt-auto pt-6">
                 <div className="relative h-56">
