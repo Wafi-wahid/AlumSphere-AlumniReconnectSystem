@@ -24,8 +24,41 @@ const UserSchema = new Schema(
     experienceYears: { type: Number },
     profileCompleted: { type: Boolean, default: false },
     mentorEligible: { type: Boolean, default: false },
+    
+    // New fields for enhanced onboarding
+    interests: { type: [String], default: [] },
+    preferredIndustries: { type: [String], default: [] },
+    skillsToDevelop: { type: [String], default: [] },
+    mentorshipPreferences: {
+      seekingMentor: { type: Boolean, default: false },
+      availableToMentor: { type: Boolean, default: false },
+      mentorshipGoals: { type: [String], default: [] },
+      preferredCommunication: {
+        type: String,
+        enum: ['chat', 'video', 'in-person', 'any'],
+        default: 'any'
+      }
+    },
+    onboardingCompleted: { type: Boolean, default: false },
+    onboardingStep: { type: Number, default: 0 }
   },
-  { timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } }
+  { 
+    timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' },
+    toJSON: {
+      transform: function(doc: any, ret: any) {
+        // Type assertion to allow property deletion
+        const retObj = ret as { passwordHash?: string; __v?: any; [key: string]: any };
+        
+        if ('passwordHash' in retObj) {
+          delete retObj.passwordHash;
+        }
+        if ('__v' in retObj) {
+          delete retObj.__v;
+        }
+        return retObj;
+      }
+    }
+  }
 );
 
 export type IUser = {
@@ -49,8 +82,19 @@ export type IUser = {
   profileHeadline?: string | null;
   location?: string | null;
   experienceYears?: number | null;
+  interests?: string[];
+  preferredIndustries?: string[];
+  skillsToDevelop?: string[];
+  mentorshipPreferences?: {
+    seekingMentor: boolean;
+    availableToMentor: boolean;
+    mentorshipGoals: string[];
+    preferredCommunication: 'chat' | 'video' | 'in-person' | 'any';
+  };
   profileCompleted: boolean;
   mentorEligible: boolean;
+  onboardingCompleted: boolean;
+  onboardingStep: number;
   createdAt: Date;
   updatedAt: Date;
 };
