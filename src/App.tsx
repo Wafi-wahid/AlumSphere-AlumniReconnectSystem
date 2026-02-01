@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/store/auth";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { LoginPage } from "@/components/auth/LoginPage";
 import { BrandLoader } from "@/components/ui/BrandLoader";
 
 // Pages
@@ -45,8 +46,7 @@ const App = () => (
               <Routes>
                 {/* Public routes */}
                 <Route path="/register" element={<Register />} />
-                {/* Render a login/register page instead of redirecting to avoid infinite loops when unauthenticated */}
-                <Route path="/login" element={<Register />} />
+                <Route path="/login" element={<LoginPage />} />
 
                 {/* Onboarding flow - only accessible if not completed */}
                 <Route 

@@ -15,6 +15,12 @@ export interface SessionUser {
   messages?: number;
   onboardingCompleted?: boolean;
   onboardingStep?: number;
+  onboardingRequired?: boolean;
+  bio?: string;
+  interests?: string[];
+  preferredIndustries?: string[];
+  skillsToDevelop?: string[];
+  mentorshipPreferences?: any;
 }
 
 interface AuthContextValue {
@@ -44,7 +50,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         notifications: user.notifications || 0,
         messages: user.messages || 0,
         onboardingCompleted: user.onboardingCompleted || false,
-        onboardingStep: user.onboardingStep || 0
+        onboardingStep: user.onboardingStep || 0,
+        onboardingRequired: (user as any).onboardingRequired || false,
       };
       setUser(updatedUser);
       return updatedUser;
@@ -57,7 +64,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    refresh();
+    refresh().catch(() => {
+      // Not logged in / session expired is expected here; routing will send user to /login.
+    });
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -70,7 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       notifications: user.notifications || 0,
       messages: user.messages || 0,
       onboardingCompleted: user.onboardingCompleted || false,
-      onboardingStep: user.onboardingStep || 0
+      onboardingStep: user.onboardingStep || 0,
+      onboardingRequired: (user as any).onboardingRequired || false,
     };
     setUser(updatedUser);
     return updatedUser;
@@ -89,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         onboardingCompleted: true,
         onboardingStep: 5
       });
-      setUser(prev => prev ? { ...prev, ...user, onboardingCompleted: true } : null);
+      setUser(prev => prev ? { ...prev, ...user, onboardingCompleted: true, onboardingRequired: false } : null);
       return user;
     } catch (error) {
       console.error('Failed to complete onboarding:', error);
@@ -105,7 +115,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       notifications: 0,
       messages: 0,
       onboardingCompleted: false,
-      onboardingStep: 0
+      onboardingStep: 0,
+      onboardingRequired: true,
     };
     setUser(updatedUser);
     return updatedUser;
@@ -119,7 +130,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       notifications: 0,
       messages: 0,
       onboardingCompleted: false,
-      onboardingStep: 0
+      onboardingStep: 0,
+      onboardingRequired: true,
     };
     setUser(updatedUser);
     return updatedUser;

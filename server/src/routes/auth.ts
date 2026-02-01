@@ -163,6 +163,9 @@ authRouter.post('/register', async (req, res) => {
       gradSeason: 'gradSeason' in parsed ? (parsed as any).gradSeason : undefined,
       gradYear: 'gradYear' in parsed ? (parsed as any).gradYear : undefined,
       linkedinId: 'linkedinId' in parsed ? (parsed as any).linkedinId ?? undefined : undefined,
+      onboardingRequired: true,
+      onboardingCompleted: false,
+      onboardingStep: 0,
     });
     const user = { id: String(doc._id), role: doc.role, name: doc.name, email: doc.email, profilePicture: doc.profilePicture } as any;
 

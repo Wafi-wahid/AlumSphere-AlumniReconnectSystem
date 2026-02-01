@@ -37,6 +37,7 @@ const OnboardingFlow = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // If onboarding already completed, redirect to homepage
   useEffect(() => {
@@ -86,6 +87,41 @@ const OnboardingFlow = () => {
     }));
   };
 
+  const canProceedFromStep = (stepIndex: number) => {
+    if (stepIndex === 0) return true;
+
+    if (stepIndex === 1) {
+      return formData.name.trim().length >= 2;
+    }
+
+    if (stepIndex === 2) {
+      // Require at least 1 interest OR 1 industry
+      return formData.interests.length > 0 || formData.preferredIndustries.length > 0;
+    }
+
+    if (stepIndex === 3) {
+      // Require at least 1 skill
+      return formData.skillsToDevelop.length > 0;
+    }
+
+    if (stepIndex === 4) {
+      // If they opt into mentorship (either way), require at least one goal
+      const wantsMentorship = formData.mentorshipPreferences.seekingMentor || formData.mentorshipPreferences.availableToMentor;
+      if (!wantsMentorship) return true;
+      return formData.mentorshipPreferences.mentorshipGoals.length > 0;
+    }
+
+    return true;
+  };
+
+  const getValidationMessage = (stepIndex: number) => {
+    if (stepIndex === 1) return 'Please enter your full name to continue.';
+    if (stepIndex === 2) return 'Please select at least one interest or one preferred industry to continue.';
+    if (stepIndex === 3) return 'Please add at least one skill to develop to continue.';
+    if (stepIndex === 4) return 'Please select at least one mentorship goal to continue.';
+    return 'Please complete the required fields to continue.';
+  };
+
   // Save step progress (non-blocking)
   const saveProgress = async (nextStepIndex: number) => {
     try {
@@ -103,6 +139,13 @@ const OnboardingFlow = () => {
   };
 
   const nextStep = () => {
+    setValidationError(null);
+
+    if (!canProceedFromStep(currentStep)) {
+      setValidationError(getValidationMessage(currentStep));
+      return;
+    }
+
     if (currentStep < totalSteps - 1) {
       const next = currentStep + 1;
       saveProgress(next);
@@ -183,6 +226,12 @@ const OnboardingFlow = () => {
           {renderStep()}
         </div>
 
+        {validationError && (
+          <div className="text-sm text-destructive">
+            {validationError}
+          </div>
+        )}
+
         {/* Navigation Buttons */}
         <div className="flex justify-between pt-4 border-t">
           <Button
@@ -195,7 +244,7 @@ const OnboardingFlow = () => {
           
           <Button
             onClick={nextStep}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !canProceedFromStep(currentStep)}
           >
             {currentStep === totalSteps - 1 
               ? isSubmitting ? 'Completing...' : 'Complete Setup'

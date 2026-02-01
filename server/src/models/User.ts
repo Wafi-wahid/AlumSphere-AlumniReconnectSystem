@@ -14,6 +14,7 @@ const UserSchema = new Schema(
     gradYear: { type: Number },
     linkedinId: { type: String },
     profilePicture: { type: String },
+    bio: { type: String },
     program: { type: String },
     currentCompany: { type: String },
     position: { type: String },
@@ -37,10 +38,12 @@ const UserSchema = new Schema(
         type: String,
         enum: ['chat', 'video', 'in-person', 'any'],
         default: 'any'
-      }
+      },
+      additionalNotes: { type: String },
     },
     onboardingCompleted: { type: Boolean, default: false },
-    onboardingStep: { type: Number, default: 0 }
+    onboardingStep: { type: Number, default: 0 },
+    onboardingRequired: { type: Boolean, default: false },
   },
   { 
     timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' },
@@ -75,6 +78,7 @@ export type IUser = {
   gradYear?: number | null;
   linkedinId?: string | null;
   profilePicture?: string | null;
+  bio?: string | null;
   program?: string | null;
   currentCompany?: string | null;
   position?: string | null;
@@ -90,11 +94,13 @@ export type IUser = {
     availableToMentor: boolean;
     mentorshipGoals: string[];
     preferredCommunication: 'chat' | 'video' | 'in-person' | 'any';
+    additionalNotes?: string;
   };
   profileCompleted: boolean;
   mentorEligible: boolean;
   onboardingCompleted: boolean;
   onboardingStep: number;
+  onboardingRequired: boolean;
   createdAt: Date;
   updatedAt: Date;
 };

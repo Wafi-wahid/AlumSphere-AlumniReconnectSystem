@@ -27,8 +27,8 @@ export const ProtectedRoute = ({
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Redirect to onboarding if required and not completed
-  if (requireOnboardingComplete && !user.onboardingCompleted) {
+  // Only force onboarding for newly registered users
+  if (requireOnboardingComplete && (user as any).onboardingRequired && !user.onboardingCompleted) {
     return <Navigate to="/onboarding" state={{ from: location }} replace />;
   }
 

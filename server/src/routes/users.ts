@@ -56,6 +56,7 @@ userRouter.get('/me', requireAuth, async (req, res) => {
     gradYear: userDoc.gradYear,
     linkedinId: userDoc.linkedinId,
     profilePicture: userDoc.profilePicture,
+    bio: userDoc.bio,
     program: userDoc.program,
     currentCompany: userDoc.currentCompany,
     position: userDoc.position,
@@ -72,13 +73,15 @@ userRouter.get('/me', requireAuth, async (req, res) => {
       seekingMentor: userDoc.mentorshipPreferences?.seekingMentor || false,
       availableToMentor: userDoc.mentorshipPreferences?.availableToMentor || false,
       mentorshipGoals: userDoc.mentorshipPreferences?.mentorshipGoals || [],
-      preferredCommunication: userDoc.mentorshipPreferences?.preferredCommunication || 'any'
+      preferredCommunication: userDoc.mentorshipPreferences?.preferredCommunication || 'any',
+      additionalNotes: (userDoc.mentorshipPreferences as any)?.additionalNotes,
     },
     
     profileCompleted: !!userDoc.profileCompleted,
     mentorEligible: !!userDoc.mentorEligible,
     onboardingCompleted: !!userDoc.onboardingCompleted,
     onboardingStep: userDoc.onboardingStep || 0,
+    onboardingRequired: !!(userDoc as any).onboardingRequired,
     
     // Timestamps
     createdAt: userDoc.createdAt,
@@ -100,7 +103,8 @@ const updateSchema = z.object({
   gradYear: z.number().int().min(2010).max(2025).optional(),
   
   // Profile info
-  profilePicture: emptyToUndef(z.string().regex(/^(https?:\/\/.*|\/uploads\/.*)$/)),
+  profilePicture: emptyToUndef(z.string().regex(/^(https?:\/\/.*|\/uploads\/.*|data:image\/.*)$/)),
+  bio: emptyToUndef(z.string().max(500)),
   program: emptyToUndef(z.string().min(2)),
   currentCompany: emptyToUndef(z.string()),
   position: emptyToUndef(z.string()),
@@ -117,10 +121,12 @@ const updateSchema = z.object({
     seekingMentor: z.boolean().default(false),
     availableToMentor: z.boolean().default(false),
     mentorshipGoals: z.array(z.string()).default([]),
-    preferredCommunication: z.enum(['chat', 'video', 'in-person', 'any']).default('any')
+    preferredCommunication: z.enum(['chat', 'video', 'in-person', 'any']).default('any'),
+    additionalNotes: z.string().max(1000).optional(),
   }).optional(),
   onboardingCompleted: z.boolean().optional(),
-  onboardingStep: z.number().int().min(0).max(10).default(0).optional()
+  onboardingStep: z.number().int().min(0).max(10).default(0).optional(),
+  onboardingRequired: z.boolean().optional(),
 }).partial();
 
 userRouter.patch('/me', requireAuth, async (req, res) => {
@@ -163,6 +169,11 @@ userRouter.patch('/me', requireAuth, async (req, res) => {
     data.onboardingCompleted = true;
   }
 
+  // If onboarding is completed, clear onboardingRequired
+  if (data.onboardingCompleted) {
+    (data as any).onboardingRequired = false;
+  }
+
   // Update the user with the new data
   const updatedUser = await User.findByIdAndUpdate(
     userId, 
@@ -190,6 +201,7 @@ userRouter.patch('/me', requireAuth, async (req, res) => {
     gradYear: userDoc.gradYear,
     linkedinId: userDoc.linkedinId,
     profilePicture: userDoc.profilePicture,
+    bio: (userDoc as any).bio,
     program: userDoc.program,
     currentCompany: userDoc.currentCompany,
     position: userDoc.position,
@@ -206,13 +218,15 @@ userRouter.patch('/me', requireAuth, async (req, res) => {
       seekingMentor: userDoc.mentorshipPreferences?.seekingMentor || false,
       availableToMentor: userDoc.mentorshipPreferences?.availableToMentor || false,
       mentorshipGoals: userDoc.mentorshipPreferences?.mentorshipGoals || [],
-      preferredCommunication: userDoc.mentorshipPreferences?.preferredCommunication || 'any'
+      preferredCommunication: userDoc.mentorshipPreferences?.preferredCommunication || 'any',
+      additionalNotes: (userDoc.mentorshipPreferences as any)?.additionalNotes,
     },
     
     profileCompleted: !!userDoc.profileCompleted,
     mentorEligible: !!userDoc.mentorEligible,
     onboardingCompleted: !!userDoc.onboardingCompleted,
     onboardingStep: userDoc.onboardingStep || 0,
+    onboardingRequired: !!(userDoc as any).onboardingRequired,
     
     // Timestamps
     createdAt: userDoc.createdAt,
