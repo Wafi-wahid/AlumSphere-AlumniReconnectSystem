@@ -203,7 +203,7 @@ export default function Register() {
         batchYear: data.batchYear,
       });
       toast.success("Registered as Student");
-      window.location.href = "/";
+      window.location.href = "/onboarding";
     } catch (e: any) {
       toast.error(e.message || "Registration failed");
     }
@@ -221,7 +221,7 @@ export default function Register() {
         linkedinId: data.linkedinId || undefined,
       });
       toast.success("Registered as Alumni");
-      window.location.href = "/";
+      window.location.href = "/onboarding";
     } catch (e: any) {
       toast.error(e.message || "Registration failed");
     }

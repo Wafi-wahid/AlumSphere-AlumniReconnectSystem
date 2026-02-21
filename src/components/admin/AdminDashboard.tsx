@@ -11,6 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Users, CalendarPlus, Briefcase, MessageSquare, PlayCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 function randomFrom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -52,6 +55,7 @@ function makeProfile(i: number) {
 
 export function AdminDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [seeding, setSeeding] = useState(false);
   const [progress, setProgress] = useState(0);
   const [count, setCount] = useState(100);
@@ -66,6 +70,10 @@ export function AdminDashboard() {
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
+  const [adminTool, setAdminTool] = useState<'create' | 'crawl' | 'profiles' | 'roles'>('create');
+  const goTab = (tab: string) => navigate({ pathname: "/", search: `?tab=${tab}` });
 
   // Realtime profiles feed
   useEffect(() => {
@@ -100,6 +108,12 @@ export function AdminDashboard() {
   useEffect(() => {
     const id = setInterval(loadUsers, 30000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const key = "admin_tour_done";
+    const done = (() => { try { return localStorage.getItem(key) === "1"; } catch { return false; } })();
+    if (!done) setTourOpen(true);
   }, []);
 
   const ensureAuthReady = async () => {
@@ -151,103 +165,195 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-      {/* Analytics */}
-      {user?.role === 'super_admin' && (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader><CardTitle>Total Users (Server)</CardTitle></CardHeader>
-            <CardContent className="text-2xl font-bold">{users.length}</CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle>Total Profiles</CardTitle></CardHeader>
-            <CardContent className="text-2xl font-bold">{profiles.length}</CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle>Visible Profiles</CardTitle></CardHeader>
-            <CardContent className="text-2xl font-bold">{profiles.filter(p => p.visible !== false).length}</CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle>Hidden Profiles</CardTitle></CardHeader>
-            <CardContent className="text-2xl font-bold">{profiles.filter(p => p.visible === false).length}</CardContent>
-          </Card>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+          <div className="text-sm text-muted-foreground">Quick actions to manage users, events, jobs, and community.</div>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" className="gap-2" onClick={() => { setTourStep(0); setTourOpen(true); }}>
+            <PlayCircle className="h-4 w-4" /> Take a Tour
+          </Button>
+        </div>
+      </div>
 
-      {user?.role === 'super_admin' && (
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="hover:shadow-md transition-shadow border-2 border-[#1e3a8a]">
           <CardHeader>
-            <CardTitle>Crawl Alumni Data</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base"><Users className="h-4 w-4" /> Manage Users</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Simulate a crawl and publish profiles to the directory. Profiles appear on the user side immediately via realtime listeners.
-            </p>
-            <div className="flex items-center gap-2">
-              <input
-                className="border rounded px-2 py-1 w-24 bg-background"
-                type="number"
-                min={10}
-                max={1000}
-                value={count}
-                onChange={(e) => setCount(Math.min(1000, Math.max(10, parseInt(e.target.value || '0', 10))))}
-              />
-              <span className="text-sm text-muted-foreground">profiles</span>
-            </div>
-            <Button onClick={startCrawlSeed} disabled={seeding}>
-              {seeding ? "Seeding..." : "Start Crawl"}
-            </Button>
-            {seeding && (
-              <div className="space-y-2">
-                <Progress value={progress} />
-                <div className="text-xs text-muted-foreground">{progress}%</div>
-              </div>
-            )}
+          <CardContent className="space-y-2">
+            <div className="text-sm text-muted-foreground">View, assign roles, and categorize admins.</div>
+            <Button size="sm" className="w-full" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}>Open Users & Roles</Button>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="hover:shadow-md transition-shadow border-2 border-[#1e3a8a]">
           <CardHeader>
-            <CardTitle>Create Admin User</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base"><CalendarPlus className="h-4 w-4" /> Post Event</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid gap-2">
-              <label className="text-sm" htmlFor="aname">Name</label>
-              <Input id="aname" value={newAdmin.name} onChange={(e) => setNewAdmin({ ...newAdmin, name: e.target.value })} />
-            </div>
-            <div className="grid gap-2">
-              <label className="text-sm" htmlFor="aemail">Email</label>
-              <Input id="aemail" type="email" value={newAdmin.email} onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })} />
-            </div>
-            <div className="grid gap-2">
-              <label className="text-sm" htmlFor="apass">Password</label>
-              <Input id="apass" type="password" value={newAdmin.password} onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })} />
-            </div>
+          <CardContent className="space-y-2">
+            <div className="text-sm text-muted-foreground">Publish events for students and alumni.</div>
             <Button
-              disabled={creatingAdmin}
-              onClick={async () => {
-                try {
-                  setCreatingAdmin(true);
-                  await api("/admin/users", { method: 'POST', body: JSON.stringify(newAdmin) });
-                  toast.success('Admin created');
-                  setNewAdmin({ name: "", email: "", password: "" });
-                } catch (e: any) {
-                  toast.error(e.message || 'Failed to create admin');
-                } finally {
-                  setCreatingAdmin(false);
-                }
-              }}
+              size="sm"
+              className="w-full bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]"
+              onClick={() => goTab('events')}
             >
-              {creatingAdmin ? 'Creating...' : 'Create Admin'}
+              Go to Events
             </Button>
-            <div className="text-xs text-muted-foreground">Requires super_admin session</div>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow border-2 border-[#1e3a8a]">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base"><Briefcase className="h-4 w-4" /> Post Job</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="text-sm text-muted-foreground">Share jobs or internships to careers.</div>
+            <Button
+              size="sm"
+              className="w-full bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]"
+              onClick={() => goTab('careers')}
+            >
+              Go to Jobs
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow border-2 border-[#1e3a8a]">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base"><MessageSquare className="h-4 w-4" /> Community</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="text-sm text-muted-foreground">Moderate posts and keep discussions healthy.</div>
+            <Button
+              size="sm"
+              className="w-full bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]"
+              onClick={() => goTab('community')}
+            >
+              Go to Community
+            </Button>
           </CardContent>
         </Card>
       </div>
-      )}
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card>
+      {/* Colorful summary cards */}
+      <div className="grid md:grid-cols-3 gap-4">
+        <Card className="bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 border-violet-500/20">
+          <CardHeader><CardTitle className="text-sm">Server Users</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{users.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">Accounts with roles</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/20">
+          <CardHeader><CardTitle className="text-sm">Directory Profiles</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{profiles.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">Realtime from Firestore</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border-emerald-500/20">
+          <CardHeader><CardTitle className="text-sm">Visible Profiles</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{profiles.filter(p => p.visible !== false).length}</div>
+            <div className="text-xs text-muted-foreground mt-1">Hidden: {profiles.filter(p => p.visible === false).length}</div>
+          </CardContent>
+        </Card>
+      </div>
+      
+
+      {/* Simple inline charts */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card className="border-2 border-[#1e3a8a]">
+          <CardHeader><CardTitle>Users Growth (mock)</CardTitle></CardHeader>
+          <CardContent>
+            {(() => {
+              const points = Array.from({ length: 12 }, (_, i) => {
+                const base = users.length;
+                const jitter = Math.sin(i / 2) * 3 + (i * base) / 60;
+                return Math.max(0, base / 2 + jitter);
+              });
+              const max = Math.max(1, ...points);
+              const path = points
+                .map((v, i) => `${(i / 11) * 100},${100 - (v / max) * 100}`)
+                .join(" ");
+              return (
+                <svg viewBox="0 0 100 100" className="w-full h-36">
+                  <defs>
+                    <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.6" />
+                      <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <polyline fill="none" stroke="#8b5cf6" strokeWidth="1.5" points={path} />
+                  <polygon fill="url(#grad)" points={`0,100 ${path} 100,100`} />
+                </svg>
+              );
+            })()}
+            <div className="text-xs text-muted-foreground">Mock trend for visual context</div>
+          </CardContent>
+        </Card>
+        <Card className="border-2 border-[#1e3a8a]">
+          <CardHeader><CardTitle>Profiles Visibility</CardTitle></CardHeader>
+          <CardContent className="flex items-center gap-4">
+            {(() => {
+              const visible = profiles.filter(p => p.visible !== false).length;
+              const hidden = profiles.filter(p => p.visible === false).length;
+              const total = Math.max(1, visible + hidden);
+              const pct = Math.round((visible / total) * 100);
+              const circ = 2 * Math.PI * 36;
+              const dash = (pct / 100) * circ;
+              return (
+                <div className="flex items-center gap-4">
+                  <svg width="100" height="100" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="36" stroke="#e5e7eb" strokeWidth="10" fill="none" />
+                    <circle cx="50" cy="50" r="36" stroke="#10b981" strokeWidth="10" fill="none" strokeDasharray={`${dash} ${circ - dash}`} transform="rotate(-90 50 50)" />
+                    <text x="50" y="54" textAnchor="middle" fontSize="14" fill="#111827">{pct}%</text>
+                  </svg>
+                  <div>
+                    <div className="text-2xl font-bold">{visible}</div>
+                    <div className="text-xs text-muted-foreground">Visible out of {total}</div>
+                  </div>
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant={adminTool === 'create' ? 'default' : 'outline'}
+            onClick={() => setAdminTool('create')}
+          >
+            Create Admin User
+          </Button>
+          <Button
+            size="sm"
+            variant={adminTool === 'crawl' ? 'default' : 'outline'}
+            onClick={() => setAdminTool('crawl')}
+          >
+            Crawl Alumni Data
+          </Button>
+          <Button
+            size="sm"
+            variant={adminTool === 'roles' ? 'default' : 'outline'}
+            onClick={() => setAdminTool('roles')}
+          >
+            Users & Roles
+          </Button>
+          <Button
+            size="sm"
+            variant={adminTool === 'profiles' ? 'default' : 'outline'}
+            onClick={() => setAdminTool('profiles')}
+          >
+            Profiles Management
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6">
+          {adminTool === 'profiles' && (
+        <Card className="border-2 border-[#1e3a8a]">
           <CardHeader>
             <CardTitle>Profiles Management</CardTitle>
           </CardHeader>
@@ -363,7 +469,9 @@ export function AdminDashboard() {
                       <div className="flex gap-2">
                         <Button
                           size="sm"
-                          variant="outline"
+                          className={p.visible === false
+                            ? 'bg-[#1e3a8a] hover:bg-[#1d4ed8] text-white'
+                            : 'bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a]'}
                           onClick={async () => {
                             try {
                               await updateDoc(doc(db, 'profiles', p.id), { visible: !(p.visible !== false) });
@@ -400,8 +508,9 @@ export function AdminDashboard() {
             </div>
           </CardContent>
         </Card>
-        {user?.role === 'super_admin' && (
-        <Card>
+          )}
+          {adminTool === 'roles' && user?.role === 'super_admin' && (
+        <Card className="border-2 border-[#1e3a8a]">
           <CardHeader>
             <CardTitle>Users & Roles</CardTitle>
           </CardHeader>
@@ -454,8 +563,125 @@ export function AdminDashboard() {
             </div>
           </CardContent>
         </Card>
-        )}
+          )}
+          {adminTool === 'crawl' && user?.role === 'super_admin' && (
+        <Card className="border-2 border-[#1e3a8a]">
+          <CardHeader>
+            <CardTitle>Crawl Alumni Data</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Simulate a crawl and publish profiles to the directory. Profiles appear on the user side immediately via realtime listeners.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                className="border rounded px-2 py-1 w-24 bg-background"
+                type="number"
+                min={10}
+                max={1000}
+                value={count}
+                onChange={(e) => setCount(Math.min(1000, Math.max(10, parseInt(e.target.value || '0', 10))))}
+              />
+              <span className="text-sm text-muted-foreground">profiles</span>
+            </div>
+            <Button onClick={startCrawlSeed} disabled={seeding}>
+              {seeding ? "Seeding..." : "Start Crawl"}
+            </Button>
+            {seeding && (
+              <div className="space-y-2">
+                <Progress value={progress} />
+                <div className="text-xs text-muted-foreground">{progress}%</div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+          )}
+          {adminTool === 'create' && user?.role === 'super_admin' && (
+        <Card className="border-2 border-[#1e3a8a]">
+          <CardHeader>
+            <CardTitle>Create Admin User</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2">
+              <label className="text-sm" htmlFor="aname">Name</label>
+              <Input id="aname" value={newAdmin.name} onChange={(e) => setNewAdmin({ ...newAdmin, name: e.target.value })} />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm" htmlFor="aemail">Email</label>
+              <Input id="aemail" type="email" value={newAdmin.email} onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })} />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm" htmlFor="apass">Password</label>
+              <Input id="apass" type="password" value={newAdmin.password} onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })} />
+            </div>
+            <Button
+              disabled={creatingAdmin}
+              onClick={async () => {
+                try {
+                  setCreatingAdmin(true);
+                  await api("/admin/users", { method: 'POST', body: JSON.stringify(newAdmin) });
+                  toast.success('Admin created');
+                  setNewAdmin({ name: "", email: "", password: "" });
+                } catch (e: any) {
+                  toast.error(e.message || 'Failed to create admin');
+                } finally {
+                  setCreatingAdmin(false);
+                }
+              }}
+            >
+              {creatingAdmin ? 'Creating...' : 'Create Admin'}
+            </Button>
+            <div className="text-xs text-muted-foreground">Requires super_admin session</div>
+          </CardContent>
+        </Card>
+          )}
+        </div>
       </div>
+
+      <Dialog open={tourOpen} onOpenChange={(o) => {
+        setTourOpen(o);
+        if (!o) try { localStorage.setItem('admin_tour_done', '1'); } catch {}
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Welcome to Admin Dashboard</DialogTitle>
+          </DialogHeader>
+          {tourStep === 0 && (
+            <div className="space-y-2 text-sm">
+              <div className="font-medium">Overview</div>
+              <div>Manage users, publish events and jobs, and moderate community content.</div>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>Use Quick Actions to jump to common tasks</li>
+                <li>Analytics show key stats at a glance</li>
+                <li>Realtime updates for profiles</li>
+              </ul>
+            </div>
+          )}
+          {tourStep === 1 && (
+            <div className="space-y-2 text-sm">
+              <div className="font-medium">Users & Roles</div>
+              <div>Assign roles and set admin categories. Only super admin can change roles.</div>
+            </div>
+          )}
+          {tourStep === 2 && (
+            <div className="space-y-2 text-sm">
+              <div className="font-medium">Profiles Management</div>
+              <div>Search, show/hide, edit details, or delete profiles in bulk.</div>
+            </div>
+          )}
+          <DialogFooter className="flex items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">Step {tourStep + 1} of 3</div>
+            <div className="flex gap-2">
+              <Button variant="outline" disabled={tourStep === 0} onClick={() => setTourStep((s) => Math.max(0, s - 1))}>Back</Button>
+              {tourStep < 2 ? (
+                <Button onClick={() => setTourStep((s) => Math.min(2, s + 1))}>Next</Button>
+              ) : (
+                <Button onClick={() => { setTourOpen(false); try { localStorage.setItem('admin_tour_done', '1'); } catch {} }}>Finish</Button>
+              )}
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

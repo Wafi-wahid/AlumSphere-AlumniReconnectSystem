@@ -3,13 +3,34 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ThemeProvider } from "next-themes";
+import { AuthProvider, useAuth } from "@/store/auth";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { LoginPage } from "@/components/auth/LoginPage";
+import { BrandLoader } from "@/components/ui/BrandLoader";
+
+// Pages
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-import { ThemeProvider } from "next-themes";
-import { AuthProvider } from "@/store/auth";
 import Register from "@/pages/Register";
 import Profile from "@/pages/Profile";
 import { MessagesPage } from "@/components/messages/MessagesPage";
+import OnboardingFlow from "@/components/onboarding/OnboardingFlow";
+
+// Create a wrapper component for protected routes
+const AuthWrapper = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <BrandLoader />
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+};
 
 const queryClient = new QueryClient();
 
@@ -19,19 +40,38 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <AuthProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/messages" element={<MessagesPage />} />
-              <Route path="/mentorship" element={<Navigate to="/?tab=mentorship" replace />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </AuthProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <AuthWrapper>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/register" element={<Register />} />
+                <Route path="/login" element={<LoginPage />} />
+
+                {/* Onboarding flow - only accessible if not completed */}
+                <Route 
+                  path="/onboarding" 
+                  element={
+                    <ProtectedRoute requireOnboardingComplete={false}>
+                      <OnboardingFlow />
+                    </ProtectedRoute>
+                  } 
+                />
+
+                {/* Protected routes - require onboarding completion */}
+                <Route element={<ProtectedRoute requireOnboardingComplete={true} />}>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/messages" element={<MessagesPage />} />
+                  <Route path="/mentorship" element={<Navigate to="/?tab=mentorship" replace />} />
+                </Route>
+
+                {/* Catch-all route */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </AuthWrapper>
+          </AuthProvider>
+        </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

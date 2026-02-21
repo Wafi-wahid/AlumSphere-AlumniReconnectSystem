@@ -14,6 +14,7 @@ import { useAuth } from "@/store/auth";
 import { MentorshipAPI } from "@/lib/mentorshipApi";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { RecommendationTeaser } from "@/components/recommendations/RecommendationTeaser";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { getAuth, signInAnonymously } from "firebase/auth";
@@ -799,6 +800,13 @@ export function MentorshipPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Top mentors for you teaser */}
+      {user?.role === 'student' && (
+        <div className="mt-8">
+          <RecommendationTeaser type="mentors" maxItems={3} />
+        </div>
+      )}
     </div>
   );
 }

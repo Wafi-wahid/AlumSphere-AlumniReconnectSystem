@@ -87,7 +87,7 @@ export default function Profile() {
       'AI/ML': ['TensorFlow', 'PyTorch', 'Scikit-Learn', 'OpenCV'],
       Cloud: ['AWS', 'Firebase', 'Docker'],
       Design: ['Figma', 'UI/UX', 'Adobe XD'],
-      Database: ['MongoDB', 'PostgreSQL', 'SQLite', 'Prisma'],
+      Database: ['MongoDB', 'PostgreSQL', 'SQLite'],
       'Soft Skills': ['Communication', 'Leadership', 'Problem Solving'],
     },
     departments: [

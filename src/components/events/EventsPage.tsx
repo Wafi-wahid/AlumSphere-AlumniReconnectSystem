@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, MapPin, Users, Clock, Video, CheckCircle, Star, Info } from "lucide-react";
+import { Calendar, MapPin, Users, Clock, Video, CheckCircle, Star, Info, CalendarDays, Trophy, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/store/auth";
+import { RecommendationTeaser } from "@/components/recommendations/RecommendationTeaser";
 import { db } from "@/lib/firebase";
 import { addDoc, collection, onSnapshot, query, setDoc, doc, collectionGroup, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
@@ -456,12 +457,43 @@ export function EventsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold">Events & Webinars</h1>
-        <p className="text-muted-foreground">
-          Join alumni events, webinars, and networking opportunities
-        </p>
-      </div>
+      {/* Hero */}
+      <Card className="overflow-hidden rounded-3xl shadow-strong border-0 bg-gradient-to-br from-[#0b1b3a] to-[#1d4ed8]">
+        <div className="grid grid-cols-1 lg:grid-cols-3">
+          
+          <div className="lg:col-span-2 p-6 md:p-10 text-white">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur px-3 py-1 text-xs">
+                <CalendarDays className="h-3.5 w-3.5" /> Upcoming Events • {events.length}+ opportunities <Trophy className="h-3.5 w-3.5 text-orange-300" />
+              </div>
+              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Events & Webinars</h1>
+              <p className="text-white/80">Join alumni events, webinars, and networking opportunities. Learn from industry leaders and grow your professional network.</p>
+            </div>
+            <div className="mt-6 flex flex-col sm:flex-row flex-wrap items-center gap-2 md:gap-3">
+              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto">
+                Browse Events
+              </Button>
+              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto">
+                Register Now
+              </Button>
+              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto">
+                Host Event
+              </Button>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_30%_20%,white_0%,transparent_40%)]" />
+            <div className="relative h-full w-full p-6 md:p-8 flex items-center justify-center">
+              <div className="rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 p-6 text-white text-center max-w-xs">
+                <div className="text-sm opacity-90">Event Calendar</div>
+                <div className="text-lg font-semibold">Join {events.length}+ upcoming events this month</div>
+                <Button className="mt-3 h-9 bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a] w-full">View Calendar</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {(user?.role === "admin" || user?.role === "super_admin") && (
         <Card>
@@ -923,6 +955,13 @@ export function EventsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Top events for you teaser */}
+      {user?.role === 'student' && (
+        <div className="mt-8">
+          <RecommendationTeaser type="events" maxItems={3} />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Send, MoreVertical, Phone, Video, Star } from "lucide-react";
+import { Search, Send, MoreVertical, Phone, Video, Star, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -93,6 +93,10 @@ export function MessagesPage() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<any | null>(null);
   const [newMessage, setNewMessage] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string; content: string }>>([]);
+  const [saveTplOpen, setSaveTplOpen] = useState(false);
+  const [tplName, setTplName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchParams] = useSearchParams();
 
@@ -115,6 +119,18 @@ export function MessagesPage() {
     });
     return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Subscribe to my message templates (per-user subcollection)
+  useEffect(() => {
+    if (!user?.id) return;
+    const ref = collection(db, "users", user.id, "templates");
+    const q = query(ref, orderBy("updatedAt", "desc"), limit(50));
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as any[];
+      setTemplates(list.map((t: any) => ({ id: t.id, name: t.name || "Template", content: t.content || "" })));
+    });
+    return () => unsub();
   }, [user?.id]);
 
   // Ensure/Select conversation from query params
@@ -144,6 +160,44 @@ export function MessagesPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, user?.id]);
+
+  // Templates helpers (component scope)
+  const insertTemplate = (t: { content: string }) => {
+    const text = t.content || "";
+    setNewMessage((prev) => {
+      if (!prev) return text;
+      const sep = prev.endsWith(" ") ? "" : " ";
+      return prev + sep + text;
+    });
+  };
+
+  const saveCurrentAsTemplate = async () => {
+    if (!user?.id) return;
+    const content = newMessage.trim();
+    if (!content) {
+      toast({ title: "Nothing to save", description: "Type a message first." });
+      return;
+    }
+    try {
+      const ref = collection(db, "users", user.id, "templates");
+      await addDoc(ref, { name: tplName || content.slice(0, 30), content, updatedAt: serverTimestamp() });
+      setTplName("");
+      setSaveTplOpen(false);
+      toast({ title: "Template saved" });
+    } catch (e: any) {
+      toast({ title: "Failed to save template", description: e?.message || String(e), variant: 'destructive' as any });
+    }
+  };
+
+  const deleteTemplate = async (id: string) => {
+    if (!user?.id) return;
+    try {
+      await deleteDoc(doc(db, "users", user.id, "templates", id));
+      toast({ title: "Template deleted" });
+    } catch (e: any) {
+      toast({ title: "Failed to delete template", description: e?.message || String(e), variant: 'destructive' as any });
+    }
+  };
 
   // Subscribe to messages for selected conversation
   const [messages, setMessages] = useState<any[]>([]);
@@ -530,19 +584,47 @@ export function MessagesPage() {
     setVideoMuted(!videoMuted);
   };
 
+  const uploadAttachment = async (): Promise<{ url: string; name: string; type: string; size: number } | null> => {
+    if (!selectedFile) return null;
+    try {
+      const base = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+      const form = new FormData();
+      form.append('file', selectedFile);
+      const res = await fetch(`${base}/me/attachment`, {
+        method: 'POST',
+        credentials: 'include',
+        body: form,
+      });
+      if (!res.ok) throw new Error((await res.json())?.error || 'Upload failed');
+      const data = await res.json();
+      return data as any;
+    } catch (e: any) {
+      toast({ title: 'Upload failed', description: e?.message || String(e), variant: 'destructive' as any });
+      return null;
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!user?.id || !selectedConversation?.id) return;
     const text = newMessage.trim();
-    if (!text) return;
+    if (!text && !selectedFile) return;
     const convRef = doc(db, "conversations", selectedConversation.id);
+    let attachment: any = null;
+    if (selectedFile) {
+      const up = await uploadAttachment();
+      if (up) attachment = up;
+    }
     await addDoc(collection(convRef, "messages"), {
       senderId: user.id,
       senderName: user.name,
       text,
+      attachment,
       createdAt: serverTimestamp(),
     });
-    await setDoc(convRef, { lastMessage: text, lastSenderId: user.id, lastSenderName: user.name, updatedAt: serverTimestamp() }, { merge: true });
+    const last = text || (attachment ? attachment.name : 'Sent an attachment');
+    await setDoc(convRef, { lastMessage: last, lastSenderId: user.id, lastSenderName: user.name, updatedAt: serverTimestamp() }, { merge: true });
     setNewMessage("");
+    setSelectedFile(null);
   };
 
   // Header actions
@@ -725,7 +807,14 @@ export function MessagesPage() {
                   return (
                     <div key={m.id} className={`flex ${fromMe ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[70%] rounded-lg p-3 border border-[#0D47A1] ${fromMe ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                        <p className="text-sm">{m.text}</p>
+                        {m.text ? <p className="text-sm">{m.text}</p> : null}
+                        {m.attachment ? (
+                          <div className="mt-2">
+                            <a href={m.attachment.url} target="_blank" rel="noreferrer" className={`text-xs underline ${fromMe ? 'text-white' : 'text-blue-700'}`}>
+                              {m.attachment.name || 'Attachment'} ({Math.round((m.attachment.size || 0)/1024)} KB)
+                            </a>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -735,7 +824,34 @@ export function MessagesPage() {
 
             {/* Message Input */}
             <div className="p-4 border-t">
-              <div className="flex gap-2">
+              {/* Quick Templates (floating above input) */}
+              {user?.role === 'student' && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {[
+                    { name: 'Career advice', content: 'I want to connect and take advice on career.' },
+                    { name: 'Review CV', content: 'I want you to review my CV.' },
+                    { name: 'Nice networking', content: 'Nice networking with you.' },
+                    { name: 'Peers connect', content: 'We are peers, mind to connect and share goals?' },
+                  ].map((t) => (
+                    <Button
+                      key={t.name}
+                      size="sm"
+                      variant="secondary"
+                      className="h-7"
+                      onClick={() => insertTemplate(t)}
+                    >
+                      {t.name}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2 items-start">
+                <input
+                  type="file"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  accept=".pdf,.doc,.docx,image/png,image/jpeg,image/jpg,image/gif"
+                  className="max-w-[220px] text-xs"
+                />
                 <Textarea
                   placeholder="Type a message..."
                   value={newMessage}
@@ -748,11 +864,63 @@ export function MessagesPage() {
                   }}
                   className="min-h-[60px] resize-none border border-[#0D47A1] focus-visible:ring-[#0D47A1]"
                 />
+                {/* Templates menu */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" title="Templates">
+                      <FileText className="h-4 w-4 mr-2" /> Templates
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-72">
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">Your templates</div>
+                    {templates.length === 0 ? (
+                      <div className="px-2 py-2 text-sm text-muted-foreground">No templates yet</div>
+                    ) : (
+                      templates.map((t) => (
+                        <div key={t.id} className="flex items-center justify-between gap-2 px-2 py-1.5">
+                          <button className="text-left text-sm truncate flex-1" onClick={() => insertTemplate(t)} title={t.content}>
+                            {t.name}
+                          </button>
+                          <Button size="sm" variant="ghost" onClick={() => deleteTemplate(t.id)}>Delete</Button>
+                        </div>
+                      ))
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSaveTplOpen(true); }}>
+                      Save current as template
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button onClick={handleSendMessage}>
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
+              {selectedFile ? (
+                <div className="text-xs text-muted-foreground mt-2">
+                  Selected: {selectedFile.name} ({Math.round(selectedFile.size/1024)} KB)
+                </div>
+              ) : null}
             </div>
+
+            {/* Save Template Dialog */}
+            <Dialog open={saveTplOpen} onOpenChange={setSaveTplOpen}>
+              <DialogContent className="sm:max-w-[480px]">
+                <DialogHeader>
+                  <DialogTitle>Save as template</DialogTitle>
+                  <DialogDescription>Give your template a name to find it quickly later.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2">
+                  <Input placeholder="Template name" value={tplName} onChange={(e) => setTplName(e.target.value)} />
+                  <div className="text-xs text-muted-foreground">Content preview:</div>
+                  <div className="p-2 text-sm rounded border bg-muted/40 max-h-32 overflow-auto">
+                    {newMessage || 'Nothing typed yet'}
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button onClick={saveCurrentAsTemplate}>Save</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             </>
             )}
           </CardContent>
