@@ -27,7 +27,7 @@
   }
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Heart, MessageCircle, Share2, Send, Image, Video, FileText, Trash2, MessageSquareText } from "lucide-react";
+import { Heart, MessageCircle, Share2, Send, Image, Video, FileText, Trash2, MessageSquareText, Users, Sparkles, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -71,6 +71,8 @@ export function CommunityPage() {
   const [articleUrl, setArticleUrl] = useState<string>("");
   const [articleOpen, setArticleOpen] = useState(false);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [guidelinesOpen, setGuidelinesOpen] = useState(false);
+  const [guidelinesAccepted, setGuidelinesAccepted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [posting, setPosting] = useState(false);
   const { toast } = useToast();
@@ -129,6 +131,28 @@ export function CommunityPage() {
     };
 
   }, []);
+
+  // Check if user has accepted community guidelines
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const checkGuidelinesAccepted = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.id));
+        const userData = userDoc.data();
+        if (!userData?.communityGuidelinesAccepted) {
+          // Show guidelines dialog for new users
+          setTimeout(() => setGuidelinesOpen(true), 1000);
+        } else {
+          setGuidelinesAccepted(true);
+        }
+      } catch (error) {
+        console.error('Error checking guidelines status:', error);
+      }
+    };
+    
+    checkGuidelinesAccepted();
+  }, [user?.id]);
 
   // Connections subscriptions for duplicate guard in community
   useEffect(() => {
@@ -277,13 +301,44 @@ export function CommunityPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold">Community Feed</h1>
-        <p className="text-muted-foreground">
-          Stay connected with the alumni community
-        </p>
-      </div>
+    <div className="space-y-6">
+      {/* Hero */}
+      <Card className="overflow-hidden rounded-3xl shadow-strong border-0 bg-gradient-to-br from-[#0b1b3a] to-[#1d4ed8]">
+        <div className="grid grid-cols-1 lg:grid-cols-3">
+          
+          <div className="lg:col-span-2 p-6 md:p-10 text-white">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur px-3 py-1 text-xs">
+                <Users className="h-3.5 w-3.5" /> Active Community • {posts.length}+ posts <Sparkles className="h-3.5 w-3.5 text-orange-300" />
+              </div>
+              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Community Feed</h1>
+              <p className="text-white/80">Stay connected with the alumni community. Share your journey, celebrate achievements, and build meaningful connections.</p>
+            </div>
+            <div className="mt-6 flex flex-col sm:flex-row flex-wrap items-center gap-2 md:gap-3">
+              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto">
+                Share Update
+              </Button>
+              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto">
+                Browse Posts
+              </Button>
+              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => setGuidelinesOpen(true)}>
+                Read Guidelines
+              </Button>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_30%_20%,white_0%,transparent_40%)]" />
+            <div className="relative h-full w-full p-6 md:p-8 flex items-center justify-center">
+              <div className="rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 p-6 text-white text-center max-w-xs">
+                <div className="text-sm opacity-90">Community Stats</div>
+                <div className="text-lg font-semibold">Join {posts.length + 100}+ alumni sharing their journey</div>
+                <Button className="mt-3 h-9 bg-yellow-500 hover:bg-yellow-400 text-[#0b1b3a] w-full">Start Posting</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {/* Create Post */}
       <Card>
@@ -364,6 +419,114 @@ export function CommunityPage() {
               }
               setArticleOpen(false);
             }}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Community Guidelines Dialog */}
+      <Dialog open={guidelinesOpen} onOpenChange={setGuidelinesOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5" />
+              Community Guidelines
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 mb-2">Welcome to our Alumni Community!</h3>
+              <p className="text-blue-800 text-sm">
+                To maintain a positive and professional environment, please read and agree to these guidelines before participating.
+              </p>
+            </div>
+            
+            <div className="space-y-3">
+              <h4 className="font-semibold">📝 Posting Guidelines</h4>
+              <ul className="text-sm space-y-2 text-muted-foreground">
+                <li>• Share professional achievements, career updates, and relevant industry insights</li>
+                <li>• Keep content respectful and appropriate for all alumni</li>
+                <li>• No spam, promotional content, or unrelated material</li>
+                <li>• Give credit when sharing others' work or ideas</li>
+              </ul>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-semibold">💬 Engagement Rules</h4>
+              <ul className="text-sm space-y-2 text-muted-foreground">
+                <li>• Be constructive and supportive in comments</li>
+                <li>• Respect diverse opinions and experiences</li>
+                <li>• No harassment, discrimination, or personal attacks</li>
+                <li>• Report inappropriate content to moderators</li>
+              </ul>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-semibold">🔒 Privacy & Professionalism</h4>
+              <ul className="text-sm space-y-2 text-muted-foreground">
+                <li>• Don't share confidential company information</li>
+                <li>• Respect others' privacy and personal boundaries</li>
+                <li>• Use professional language and tone</li>
+                <li>• Network genuinely - don't spam with connection requests</li>
+              </ul>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <p className="text-amber-800 text-sm">
+                <strong>Violation Consequences:</strong> Repeated violations may result in temporary or permanent removal from the community.
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-2 pt-4">
+              <input 
+                type="checkbox" 
+                id="guidelines-check" 
+                checked={guidelinesAccepted}
+                onChange={(e) => setGuidelinesAccepted(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <label htmlFor="guidelines-check" className="text-sm">
+                I have read and agree to follow these community guidelines
+              </label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setGuidelinesOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={async () => {
+                if (guidelinesAccepted) {
+                  setGuidelinesOpen(false);
+                  // Save guidelines acceptance to user profile
+                  try {
+                    await updateDoc(doc(db, 'users', user?.id), {
+                      communityGuidelinesAccepted: true,
+                      guidelinesAcceptedAt: serverTimestamp()
+                    });
+                    toast({ 
+                      title: "Guidelines Accepted", 
+                      description: "You can now participate in the community!" 
+                    });
+                  } catch (error) {
+                    console.error('Error saving guidelines acceptance:', error);
+                    toast({ 
+                      title: "Error", 
+                      description: "Failed to save guidelines acceptance", 
+                      variant: "destructive" 
+                    });
+                  }
+                } else {
+                  toast({ 
+                    title: "Required", 
+                    description: "Please accept the guidelines to continue", 
+                    variant: "destructive" 
+                  });
+                }
+              }}
+              disabled={!guidelinesAccepted}
+            >
+              Accept & Continue
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

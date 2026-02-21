@@ -4,6 +4,7 @@ import { LoginPage } from "@/components/auth/LoginPage";
 import { Header } from "@/components/layout/Header";
 import { Navigation } from "@/components/layout/Navigation";
 import { HomePage } from "@/components/dashboard/HomePage";
+import { Recommendations } from "@/components/dashboard/Recommendations";
 import { AlumniDirectory } from "@/components/directory/AlumniDirectory";
 import { MentorshipPage } from "@/components/mentorship/MentorshipPage";
 import { EventsPage } from "@/components/events/EventsPage";
@@ -60,6 +61,8 @@ const Index = () => {
     switch (activeTab) {
       case "home":
         return <HomePage user={user} onNavigate={handleTabChange} />;
+      case "recommendations":
+        return <Recommendations />;
       case "directory":
         return <AlumniDirectory />;
       case "mentorship":
@@ -77,7 +80,7 @@ const Index = () => {
       case "fame":
         return <FameHub />;
       case "dashboard":
-        return user?.role === 'admin' || user?.role === 'super_admin' ? (
+        return user?.role === 'admin' || user.role === 'super_admin' ? (
           <AdminDashboard />
         ) : (
           <HomePage user={user} onNavigate={handleTabChange} />

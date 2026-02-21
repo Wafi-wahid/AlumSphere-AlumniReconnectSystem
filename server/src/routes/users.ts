@@ -4,6 +4,7 @@ import { z } from 'zod';
 import multer = require('multer');
 import path from 'path';
 import { User, IUser } from '../models/User';
+import { syncMentorProfile } from '../services/MentorSyncService';
 import { Types, HydratedDocument } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
@@ -183,6 +184,18 @@ userRouter.patch('/me', requireAuth, async (req, res) => {
 
   if (!updatedUser) {
     return res.status(404).json({ error: 'User not found' });
+  }
+
+  // Sync mentor profile if mentorship-related fields changed
+  const mentorFieldsChanged = [
+    'experienceYears',
+    'preferredIndustries',
+    'interests',
+    'skills',
+    'mentorshipPreferences',
+  ].some(k => k in parsed.data);
+  if (mentorFieldsChanged) {
+    await syncMentorProfile(updatedUser as any);
   }
 
   // Type assertion for the updated user

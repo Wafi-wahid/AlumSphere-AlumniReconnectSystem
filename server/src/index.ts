@@ -8,6 +8,7 @@ import { authRouter } from './routes/auth';
 import { adminRouter } from './routes/admin';
 import { userRouter } from './routes/users';
 import { mentorshipRouter } from './routes/mentorship';
+import recommendationsRouter from './routes/recommendations';
 import bcrypt from 'bcryptjs';
 import './mongo';
 import { User } from './models/User';
@@ -65,6 +66,7 @@ app.use('/auth', authRouter);
 app.use('/admin', adminRouter);
 app.use('/', userRouter);
 app.use('/', mentorshipRouter);
+app.use('/recommendations', recommendationsRouter);
 
 // Error handling middleware
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

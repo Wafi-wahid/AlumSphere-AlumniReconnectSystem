@@ -1,4 +1,4 @@
-import { Home, Users, Heart, Briefcase, Calendar, MessageSquare, Megaphone, BarChart3, Award } from "lucide-react";
+import { Home, Users, Heart, Briefcase, Calendar, MessageSquare, Megaphone, BarChart3, Award, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ interface NavigationProps {
 
 const navigationItems = [
   { id: "home", label: "Home", icon: Home, roles: ["all"] },
+  { id: "recommendations", label: "For You", icon: Sparkles, roles: ["student"] },
   { id: "directory", label: "Directory", icon: Users, roles: ["all"] },
   { id: "mentorship", label: "Mentorship", icon: Heart, roles: ["student", "alumni", "faculty"] },
   { id: "careers", label: "Careers", icon: Briefcase, roles: ["all"] },

@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Briefcase, Sparkles, Lightbulb, Users, ClipboardList } from "lucide-react";
+import { RecommendationTeaser } from "@/components/recommendations/RecommendationTeaser";
 import { db } from "@/lib/firebase";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import { addDoc, collection, collectionGroup, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, where } from "firebase/firestore";
@@ -642,6 +643,13 @@ Engagement:
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Top jobs for you teaser */}
+      {user?.role === 'student' && (
+        <div className="mt-8">
+          <RecommendationTeaser type="jobs" maxItems={3} />
+        </div>
+      )}
     </div>
   );
 }
