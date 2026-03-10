@@ -1,6 +1,6 @@
  
 import { useState, useEffect, useMemo, useRef } from "react";
-import { db } from "@/lib/firebase";
+import { authReady, db } from "@/lib/firebase";
 import { collection, collectionGroup, deleteDoc, doc, getDoc, onSnapshot, setDoc, updateDoc, query, where, limit, arrayUnion } from "firebase/firestore";
 import { Users, Calendar, Briefcase, Heart, Star, Eye, ThumbsUp, Target, BarChart3, Sparkles, Flame, Trophy, Bolt, BadgeCheck, FileText, LogIn, Send, MessageSquare, Rocket, Megaphone, Mic2, Link as LinkIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -166,6 +166,8 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
 
   useEffect(() => {
     if (!user?.id) return;
+    let unsub: (() => void) | null = null;
+    let cancelled = false;
     const aliasMap: Record<string, string> = {
       'connect level 1': 'First Connection',
       'loable': 'Network Builder',
@@ -190,27 +192,38 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
       ][idx];
       return aliased;
     };
-    const unsub = onSnapshot(doc(db, 'users', user.id, 'gamification', 'summary'), (snap) => {
-      const d = snap.data() as any;
-      if (!d) return;
-      if (typeof d.points === 'number') setPoints(d.points);
-      if (typeof d.connectCount === 'number') setConnectCount(d.connectCount);
-      if (typeof d.applyCount === 'number') setApplyCount(d.applyCount);
-      if (typeof d.mentorshipCount === 'number') setMentorshipCount(d.mentorshipCount);
-      if (Array.isArray(d.earnedBadges)) {
-        const normalized: string[] = Array.from(new Set<string>(d.earnedBadges.map((x: any) => toCanonical(String(x)))));
-        setEarnedBadges(normalized);
-        setBadgesLoaded(true);
-      }
-      // Hydrate rising-edge baselines on first snapshot to avoid awarding on reload
-      if (!summaryHydratedRef.current) {
-        prevConnectRef.current = Number(d?.connectCount || 0);
-        prevApplyRef.current = Number(d?.applyCount || 0);
-        prevMentorRef.current = Number(d?.mentorshipCount || 0);
-        summaryHydratedRef.current = true;
-      }
-    });
-    return () => unsub();
+    (async () => {
+      await authReady;
+      if (cancelled) return;
+      unsub = onSnapshot(
+        doc(db, 'users', user.id, 'gamification', 'summary'),
+        (snap) => {
+          const d = snap.data() as any;
+          if (!d) return;
+          if (typeof d.points === 'number') setPoints(d.points);
+          if (typeof d.connectCount === 'number') setConnectCount(d.connectCount);
+          if (typeof d.applyCount === 'number') setApplyCount(d.applyCount);
+          if (typeof d.mentorshipCount === 'number') setMentorshipCount(d.mentorshipCount);
+          if (Array.isArray(d.earnedBadges)) {
+            const normalized: string[] = Array.from(new Set<string>(d.earnedBadges.map((x: any) => toCanonical(String(x)))));
+            setEarnedBadges(normalized);
+            setBadgesLoaded(true);
+          }
+          // Hydrate rising-edge baselines on first snapshot to avoid awarding on reload
+          if (!summaryHydratedRef.current) {
+            prevConnectRef.current = Number(d?.connectCount || 0);
+            prevApplyRef.current = Number(d?.applyCount || 0);
+            prevMentorRef.current = Number(d?.mentorshipCount || 0);
+            summaryHydratedRef.current = true;
+          }
+        },
+        () => {}
+      );
+    })();
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
   }, [user?.id]);
 
   // Award +10 points on real increases (connections/applications/mentorship)

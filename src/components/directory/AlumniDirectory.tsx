@@ -32,7 +32,7 @@ export function AlumniDirectory() {
   const [audience, setAudience] = useState<"alumni" | "students">("alumni");
   const [people, setPeople] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
-  const [visibleCount, setVisibleCount] = useState(24);
+  const [currentPage, setCurrentPage] = useState(1);
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
   const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set());
   const [viewing, setViewing] = useState<any | null>(null);
@@ -439,11 +439,38 @@ export function AlumniDirectory() {
     return arr;
   }, [filteredAlumni, sortBy]);
 
-  const visibleAlumni = useMemo(() => sortedOrFiltered.slice(0, visibleCount), [sortedOrFiltered, visibleCount]);
+  const PAGE_SIZE = 6;
+  const totalPages = Math.max(1, Math.ceil(sortedOrFiltered.length / PAGE_SIZE));
+  const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
+  const paginatedAlumni = useMemo(() => {
+    const start = (safeCurrentPage - 1) * PAGE_SIZE;
+    return sortedOrFiltered.slice(start, start + PAGE_SIZE);
+  }, [sortedOrFiltered, safeCurrentPage]);
+
+  const pageButtons = useMemo(() => {
+    const maxButtons = 5;
+    if (totalPages <= maxButtons) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const half = Math.floor(maxButtons / 2);
+    let start = safeCurrentPage - half;
+    let end = safeCurrentPage + half;
+    if (start < 1) {
+      start = 1;
+      end = maxButtons;
+    }
+    if (end > totalPages) {
+      end = totalPages;
+      start = totalPages - maxButtons + 1;
+    }
+    const pages: number[] = [];
+    for (let p = start; p <= end; p++) pages.push(p);
+    return pages;
+  }, [safeCurrentPage, totalPages]);
 
   useEffect(() => {
-    setVisibleCount(24);
-  }, [searchQuery, filters, audience]);
+    setCurrentPage(1);
+  }, [searchQuery, filters, audience, sortBy]);
 
   // Build dynamic filter option lists from items
   const filterOptions = useMemo(() => {
@@ -658,7 +685,7 @@ export function AlumniDirectory() {
         ) : (
         <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {visibleAlumni.map((alumni: any, idx: number) => (
+          {paginatedAlumni.map((alumni: any, idx: number) => (
             <Card
               key={alumni.id}
               className="border border-blue-400 hover:border-blue-500 hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.01] transition-transform transition-shadow duration-200 cursor-pointer group rounded-xl h-full"
@@ -780,7 +807,7 @@ export function AlumniDirectory() {
                       </Button>
                     );
                   })()}
-                  {alumni.mentorAvailable && (
+                  {alumni.source === 'user' && alumni.mentorAvailable && (
                     <Button size="sm" variant="outline" className="flex-1">
                       <Heart className="h-4 w-4 mr-2" />
                       Mentor Request
@@ -791,11 +818,57 @@ export function AlumniDirectory() {
             </Card>
           ))}
         </div>
-        {filteredAlumni.length > visibleCount && (
-          <div className="flex justify-center">
-            <Button variant="outline" onClick={() => setVisibleCount((c) => c + 24)}>Load more</Button>
+        <div className="flex flex-col items-center gap-3 pt-2">
+          <div className="text-sm text-muted-foreground">
+            Page {safeCurrentPage} of {totalPages}
           </div>
-        )}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={safeCurrentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            >
+              Prev
+            </Button>
+
+            {pageButtons[0] !== 1 && (
+              <>
+                <Button variant={safeCurrentPage === 1 ? "default" : "outline"} size="sm" onClick={() => setCurrentPage(1)}>1</Button>
+                <span className="px-1 text-muted-foreground">…</span>
+              </>
+            )}
+
+            {pageButtons.map((p) => (
+              <Button
+                key={p}
+                variant={safeCurrentPage === p ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCurrentPage(p)}
+              >
+                {p}
+              </Button>
+            ))}
+
+            {pageButtons[pageButtons.length - 1] !== totalPages && (
+              <>
+                <span className="px-1 text-muted-foreground">…</span>
+                <Button variant={safeCurrentPage === totalPages ? "default" : "outline"} size="sm" onClick={() => setCurrentPage(totalPages)}>
+                  {totalPages}
+                </Button>
+              </>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={safeCurrentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
         </>
         )}
       </div>

@@ -34,7 +34,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/store/auth";
-import { db } from "@/lib/firebase";
+import { authReady, db } from "@/lib/firebase";
 import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, setDoc, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
@@ -157,24 +157,52 @@ export function CommunityPage() {
   // Connections subscriptions for duplicate guard in community
   useEffect(() => {
     if (!user?.id) return;
-    const unsubSent = onSnapshot(collection(db, 'connections', user.id, 'sent'), (snap) => {
-      setSentRequests(new Set(snap.docs.map((d) => d.id)));
-    });
-    const unsubAcc = onSnapshot(collection(db, 'connections', user.id, 'accepted'), (snap) => {
-      setAcceptedIds(new Set(snap.docs.map((d) => d.id)));
-    });
-    return () => { unsubSent(); unsubAcc(); };
+    let unsubSent: (() => void) | null = null;
+    let unsubAcc: (() => void) | null = null;
+    let cancelled = false;
+    (async () => {
+      await authReady;
+      if (cancelled) return;
+      unsubSent = onSnapshot(
+        collection(db, 'connections', user.id, 'sent'),
+        (snap) => setSentRequests(new Set(snap.docs.map((d) => d.id))),
+        () => {}
+      );
+      unsubAcc = onSnapshot(
+        collection(db, 'connections', user.id, 'accepted'),
+        (snap) => setAcceptedIds(new Set(snap.docs.map((d) => d.id))),
+        () => {}
+      );
+    })();
+    return () => {
+      cancelled = true;
+      if (unsubSent) unsubSent();
+      if (unsubAcc) unsubAcc();
+    };
   }, [user?.id]);
 
   // Subscribe to real posts (exclude dummy client-side), show latest 10
   useEffect(() => {
-    const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(10));
-    const unsub = onSnapshot(q, (snap) => {
-      const items: Post[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-      const real = items.filter((p) => !p.isDummy);
-      setPosts(real);
-    });
-    return () => unsub();
+    let unsub: (() => void) | null = null;
+    let cancelled = false;
+    (async () => {
+      await authReady;
+      if (cancelled) return;
+      const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(10));
+      unsub = onSnapshot(
+        q,
+        (snap) => {
+          const items: Post[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+          const real = items.filter((p) => !p.isDummy);
+          setPosts(real);
+        },
+        () => {}
+      );
+    })();
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
   }, []);
 
   const userLiked = useMemo(() => {

@@ -15,7 +15,7 @@ import { MentorshipAPI } from "@/lib/mentorshipApi";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { RecommendationTeaser } from "@/components/recommendations/RecommendationTeaser";
-import { db } from "@/lib/firebase";
+import { authReady, db } from "@/lib/firebase";
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -213,15 +213,36 @@ export function MentorshipPage() {
 
   // Load mentors from Firestore (mirror of alumni directory: users + profiles)
   useEffect(() => {
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      setUsersCol(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
-    });
-    const unsubProfiles = onSnapshot(collection(db, 'profiles'), (snap) => {
-      const obj: Record<string, any> = {};
-      snap.docs.forEach((d) => { obj[d.id] = { id: d.id, ...(d.data() as any) }; });
-      setProfilesCol(obj);
-    });
-    return () => { unsubUsers(); unsubProfiles(); };
+    let unsubUsers: (() => void) | null = null;
+    let unsubProfiles: (() => void) | null = null;
+    let cancelled = false;
+    (async () => {
+      await authReady;
+      if (cancelled) return;
+      unsubUsers = onSnapshot(
+        collection(db, 'users'),
+        (snap) => {
+          setUsersCol(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+        },
+        () => {}
+      );
+      unsubProfiles = onSnapshot(
+        collection(db, 'profiles'),
+        (snap) => {
+          const obj: Record<string, any> = {};
+          snap.docs.forEach((d) => {
+            obj[d.id] = { id: d.id, ...(d.data() as any) };
+          });
+          setProfilesCol(obj);
+        },
+        () => {}
+      );
+    })();
+    return () => {
+      cancelled = true;
+      if (unsubUsers) unsubUsers();
+      if (unsubProfiles) unsubProfiles();
+    };
   }, []);
 
   // Track my sent and accepted connections (requires Firebase auth; skip if not signed in)
