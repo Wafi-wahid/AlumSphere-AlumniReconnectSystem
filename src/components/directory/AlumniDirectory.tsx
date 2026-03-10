@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Filter, MapPin, Briefcase, GraduationCap, MessageCircle, Heart, X, Linkedin } from "lucide-react";
+import { Search, Filter, MapPin, Briefcase, GraduationCap, MessageCircle, Heart, X, Linkedin, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +38,7 @@ export function AlumniDirectory() {
   const [viewing, setViewing] = useState<any | null>(null);
   const searchSectionRef = useRef<HTMLDivElement | null>(null);
   const [sortBy, setSortBy] = useState<'relevance' | 'name' | 'active'>('relevance');
+  const [showConnectionsOnly, setShowConnectionsOnly] = useState(false);
 
   const handleOpenFiltersClick = () => {
     setShowAdvanced(true);
@@ -425,7 +426,11 @@ export function AlumniDirectory() {
     const matchesCompany = (filters.company === "all" || !filters.company) || (alumni.company || "").toLowerCase().includes(String(filters.company).toLowerCase());
     const matchesSkill = (filters.skill === 'all' || !filters.skill)
       || (Array.isArray(alumni.skills) ? alumni.skills : []).some((s: string) => String(s || '').toLowerCase() === String(filters.skill).toLowerCase());
-    return matchAudience && matchesSearch && matchesYear && matchesDepartment && matchesLocation && matchesCompany && matchesSkill;
+    
+    // Filter for connections only if enabled
+    const matchesConnection = !showConnectionsOnly || acceptedIds.has(String(alumni.id));
+    
+    return matchAudience && matchesSearch && matchesYear && matchesDepartment && matchesLocation && matchesCompany && matchesSkill && matchesConnection;
   });
 
   const sortedOrFiltered = useMemo(() => {
@@ -564,6 +569,16 @@ export function AlumniDirectory() {
               <Button variant={audience === 'alumni' ? "default" : "outline"} onClick={() => setAudience('alumni')}>Alumni</Button>
               <Button variant={audience === 'students' ? "default" : "outline"} onClick={() => setAudience('students')}>Current Students</Button>
             </div>
+            <Button
+              variant={showConnectionsOnly ? "default" : "outline"}
+              className={showConnectionsOnly
+                ? "gap-2 bg-green-600 text-white hover:bg-green-700 border-green-600"
+                : "gap-2 border-green-400 text-green-700 hover:bg-green-50"}
+              onClick={() => setShowConnectionsOnly(!showConnectionsOnly)}
+            >
+              <Users className="h-4 w-4" />
+              {showConnectionsOnly ? "All Users" : "My Connections"}
+            </Button>
             <Button
               variant={showAdvanced ? "default" : "outline"}
               className={showAdvanced
