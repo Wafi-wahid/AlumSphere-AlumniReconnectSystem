@@ -98,6 +98,15 @@ export function Recommendations() {
     }
   };
 
+  // Auto-load fallbacks if initial load is empty
+  useEffect(() => {
+    if (!loading) {
+      if (mentors.length === 0) loadRandomFallback('mentors');
+      if (jobs.length === 0) loadRandomFallback('jobs');
+      if (events.length === 0) loadRandomFallback('events');
+    }
+  }, [loading]);
+
   if (loading) return <div className="p-4">Loading recommendations...</div>;
 
   return (
@@ -120,30 +129,63 @@ export function Recommendations() {
               </Button>
             </div>
           ) : (
-            mentors.map((mentor) => (
-              <div key={mentor.userId} className="flex items-start gap-4 p-3 border rounded-lg">
-                <Avatar className="w-12 h-12">
-                  <AvatarImage src={mentor.profilePicture} />
-                  <AvatarFallback>{mentor.name.charAt(0)}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-semibold">{mentor.name}</h4>
-                    <Badge variant="secondary">Score {mentor.score}</Badge>
-                  </div>
-                  {mentor.profileHeadline && <p className="text-sm text-muted-foreground">{mentor.profileHeadline}</p>}
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-                    {mentor.currentCompany && <span className="flex items-center gap-1"><Briefcase className="w-3 h-3" />{mentor.currentCompany}</span>}
-                    {mentor.position && <span>{mentor.position}</span>}
-                    {mentor.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{mentor.location}</span>}
-                  </div>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {mentor.mentorIndustries.slice(0, 3).map(ind => <Badge key={ind} variant="outline">{ind}</Badge>)}
-                    {mentor.mentorSkills.slice(0, 3).map(skill => <Badge key={skill} variant="outline">{skill}</Badge>)}
+            <>
+              {mentors.some(m => m.score > 0) && (
+                <p className="text-sm text-muted-foreground">Based on your interests and goals</p>
+              )}
+              {mentors.filter(m => m.score > 0).map((mentor) => (
+                <div key={mentor.userId} className="flex items-start gap-4 p-3 border rounded-lg">
+                  <Avatar className="w-12 h-12">
+                    <AvatarImage src={mentor.profilePicture} />
+                    <AvatarFallback>{mentor.name.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold">{mentor.name}</h4>
+                      <Badge variant="secondary">Score {mentor.score}</Badge>
+                    </div>
+                    {mentor.profileHeadline && <p className="text-sm text-muted-foreground">{mentor.profileHeadline}</p>}
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+                      {mentor.currentCompany && <span className="flex items-center gap-1"><Briefcase className="w-3 h-3" />{mentor.currentCompany}</span>}
+                      {mentor.position && <span>{mentor.position}</span>}
+                      {mentor.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{mentor.location}</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {mentor.mentorIndustries.slice(0, 3).map(ind => <Badge key={ind} variant="outline">{ind}</Badge>)}
+                      {mentor.mentorSkills.slice(0, 3).map(skill => <Badge key={skill} variant="outline">{skill}</Badge>)}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              ))}
+              {mentors.some(m => m.score > 0) && mentors.some(m => m.score === 0) && (
+                <div className="border-t pt-4 mt-4">
+                  <p className="text-sm text-muted-foreground mb-3">Apart from your interests, you might also like:</p>
+                </div>
+              )}
+              {mentors.filter(m => m.score === 0).map((mentor) => (
+                <div key={mentor.userId} className="flex items-start gap-4 p-3 border rounded-lg opacity-75">
+                  <Avatar className="w-12 h-12">
+                    <AvatarImage src={mentor.profilePicture} />
+                    <AvatarFallback>{mentor.name.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold">{mentor.name}</h4>
+                    </div>
+                    {mentor.profileHeadline && <p className="text-sm text-muted-foreground">{mentor.profileHeadline}</p>}
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+                      {mentor.currentCompany && <span className="flex items-center gap-1"><Briefcase className="w-3 h-3" />{mentor.currentCompany}</span>}
+                      {mentor.position && <span>{mentor.position}</span>}
+                      {mentor.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{mentor.location}</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {mentor.mentorIndustries.slice(0, 3).map(ind => <Badge key={ind} variant="outline">{ind}</Badge>)}
+                      {mentor.mentorSkills.slice(0, 3).map(skill => <Badge key={skill} variant="outline">{skill}</Badge>)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </>
           )}
         </CardContent>
       </Card>
@@ -166,26 +208,55 @@ export function Recommendations() {
               </Button>
             </div>
           ) : (
-            jobs.map((job) => (
-              <div key={job._id} className="p-3 border rounded-lg">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="font-semibold">{job.title}</h4>
-                    <p className="text-sm text-muted-foreground">{job.company}</p>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-                      {job.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{job.location}</span>}
-                      {job.employmentType && <span>{job.employmentType}</span>}
-                      {job.salaryRange && <span>{job.salaryRange}</span>}
+            <>
+              {jobs.some(j => j.score > 0) && (
+                <p className="text-sm text-muted-foreground">Based on your skills and interests</p>
+              )}
+              {jobs.filter(j => j.score > 0).map((job) => (
+                <div key={job._id} className="p-3 border rounded-lg">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-semibold">{job.title}</h4>
+                      <p className="text-sm text-muted-foreground">{job.company}</p>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+                        {job.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{job.location}</span>}
+                        {job.employmentType && <span>{job.employmentType}</span>}
+                        {job.salaryRange && <span>{job.salaryRange}</span>}
+                      </div>
+                    </div>
+                    <Badge variant="secondary">Score {job.score}</Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {job.requiredSkills.slice(0, 4).map(skill => <Badge key={skill} variant="outline">{skill}</Badge>)}
+                    {job.tags.slice(0, 2).map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
+                  </div>
+                </div>
+              ))}
+              {jobs.some(j => j.score > 0) && jobs.some(j => j.score === 0) && (
+                <div className="border-t pt-4 mt-4">
+                  <p className="text-sm text-muted-foreground mb-3">Apart from your interests, you might also like:</p>
+                </div>
+              )}
+              {jobs.filter(j => j.score === 0).map((job) => (
+                <div key={job._id} className="p-3 border rounded-lg opacity-75">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-semibold">{job.title}</h4>
+                      <p className="text-sm text-muted-foreground">{job.company}</p>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+                        {job.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{job.location}</span>}
+                        {job.employmentType && <span>{job.employmentType}</span>}
+                        {job.salaryRange && <span>{job.salaryRange}</span>}
+                      </div>
                     </div>
                   </div>
-                  <Badge variant="secondary">Score {job.score}</Badge>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {job.requiredSkills.slice(0, 4).map(skill => <Badge key={skill} variant="outline">{skill}</Badge>)}
+                    {job.tags.slice(0, 2).map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {job.requiredSkills.slice(0, 4).map(skill => <Badge key={skill} variant="outline">{skill}</Badge>)}
-                  {job.tags.slice(0, 2).map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
-                </div>
-              </div>
-            ))
+              ))}
+            </>
           )}
         </CardContent>
       </Card>
@@ -208,30 +279,63 @@ export function Recommendations() {
               </Button>
             </div>
           ) : (
-            events.map((event) => (
-              <div key={event._id} className="p-3 border rounded-lg">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="font-semibold">{event.title}</h4>
-                    <p className="text-sm text-muted-foreground">{event.organizer}</p>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(event.date).toLocaleDateString()}</span>
-                      {event.isVirtual ? <span>Virtual</span> : event.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.location}</span>}
+            <>
+              {events.some(e => e.score > 0) && (
+                <p className="text-sm text-muted-foreground">Based on your interests</p>
+              )}
+              {events.filter(e => e.score > 0).map((event) => (
+                <div key={event._id} className="p-3 border rounded-lg">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-semibold">{event.title}</h4>
+                      <p className="text-sm text-muted-foreground">{event.organizer}</p>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(event.date).toLocaleDateString()}</span>
+                        {event.isVirtual ? <span>Virtual</span> : event.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.location}</span>}
+                      </div>
+                    </div>
+                    <Badge variant="secondary">Score {event.score}</Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {event.tags.slice(0, 4).map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
+                    {event.industry && <Badge variant="outline">{event.industry}</Badge>}
+                  </div>
+                  {event.registrationLink && (
+                    <Button variant="outline" size="sm" className="mt-2" asChild>
+                      <a href={event.registrationLink} target="_blank" rel="noopener noreferrer">Register</a>
+                    </Button>
+                  )}
+                </div>
+              ))}
+              {events.some(e => e.score > 0) && events.some(e => e.score === 0) && (
+                <div className="border-t pt-4 mt-4">
+                  <p className="text-sm text-muted-foreground mb-3">Apart from your interests, you might also like:</p>
+                </div>
+              )}
+              {events.filter(e => e.score === 0).map((event) => (
+                <div key={event._id} className="p-3 border rounded-lg opacity-75">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-semibold">{event.title}</h4>
+                      <p className="text-sm text-muted-foreground">{event.organizer}</p>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(event.date).toLocaleDateString()}</span>
+                        {event.isVirtual ? <span>Virtual</span> : event.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.location}</span>}
+                      </div>
                     </div>
                   </div>
-                  <Badge variant="secondary">Score {event.score}</Badge>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {event.tags.slice(0, 4).map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
+                    {event.industry && <Badge variant="outline">{event.industry}</Badge>}
+                  </div>
+                  {event.registrationLink && (
+                    <Button variant="outline" size="sm" className="mt-2" asChild>
+                      <a href={event.registrationLink} target="_blank" rel="noopener noreferrer">Register</a>
+                    </Button>
+                  )}
                 </div>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {event.tags.slice(0, 4).map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
-                  {event.industry && <Badge variant="outline">{event.industry}</Badge>}
-                </div>
-                {event.registrationLink && (
-                  <Button variant="outline" size="sm" className="mt-2" asChild>
-                    <a href={event.registrationLink} target="_blank" rel="noopener noreferrer">Register</a>
-                  </Button>
-                )}
-              </div>
-            ))
+              ))}
+            </>
           )}
         </CardContent>
       </Card>
