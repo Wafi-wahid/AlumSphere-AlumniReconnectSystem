@@ -26,7 +26,7 @@ export interface SessionUser {
 interface AuthContextValue {
   user: SessionUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, role: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   registerStudent: (payload: any) => Promise<void>;
@@ -69,23 +69,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const login = async (email: string, password: string) => {
-    await AuthAPI.login({ email, password });
-    // Fetch full user from /me to ensure onboarding fields are present
-    const { user } = await UsersAPI.me();
-    const updatedUser = {
-      ...user,
-      avatar: (user as any).profilePicture ?? (user as any).avatar,
-      notifications: user.notifications || 0,
-      messages: user.messages || 0,
-      onboardingCompleted: user.onboardingCompleted || false,
-      onboardingStep: user.onboardingStep || 0,
-      onboardingRequired: (user as any).onboardingRequired || false,
-    };
-    setUser(updatedUser);
-    // Navigate to home page after successful login
-    navigate('/');
-    return updatedUser;
+  const login = async (email: string, password: string, role: string) => {
+    try {
+      await AuthAPI.login({ email, password, role });
+      // Fetch full user from /me to ensure onboarding fields are present
+      const { user } = await UsersAPI.me();
+      const updatedUser = {
+        ...user,
+        avatar: (user as any).profilePicture ?? (user as any).avatar,
+        notifications: user.notifications || 0,
+        messages: user.messages || 0,
+        onboardingCompleted: user.onboardingCompleted || false,
+        onboardingStep: user.onboardingStep || 0,
+        onboardingRequired: (user as any).onboardingRequired || false,
+      };
+      setUser(updatedUser);
+      // Navigate to home page after successful login
+      navigate('/');
+      return updatedUser;
+    } catch (error: any) {
+      // Extract the actual error message from API error format
+      let errorMessage = "Login failed";
+      
+      if (error.message) {
+        // Check if it's an API error format: "API error (url): actual message"
+        const apiErrorMatch = error.message.match(/API error \([^)]+\): (.+)$/);
+        if (apiErrorMatch) {
+          errorMessage = apiErrorMatch[1];
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      throw new Error(errorMessage);
+    }
   };
 
   const logout = async () => {
