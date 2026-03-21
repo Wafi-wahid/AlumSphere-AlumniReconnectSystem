@@ -297,9 +297,6 @@ export default function Register() {
                       <CardDescription className="text-slate-600">If you are currently enrolled, fill this form. Otherwise, switch to Alumni registration.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <Button type="button" onClick={startLinkedIn} className="w-full bg-[#0a66c2] hover:bg-[#084e96] text-white">
-                        <Linkedin className="h-4 w-4 mr-2" /> Sync LinkedIn (prefill name & email)
-                      </Button>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="grid gap-2">
                           <Label htmlFor="s_name" className="text-slate-700">Full Name</Label>
@@ -346,7 +343,7 @@ export default function Register() {
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="grid gap-2">
-                          <Label className="text-slate-700">Session</Label>
+                          <Label className="text-slate-700">Intake Session</Label>
                           <Select onValueChange={(v) => setValueS('batchSeason', v as any)}>
                             <SelectTrigger className="bg-white border-slate-200 text-slate-900 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-[#1A73E8]/30">
                               <SelectValue placeholder="Select session" />
@@ -437,7 +434,7 @@ export default function Register() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="grid gap-2">
-                          <Label className="text-slate-700">Session</Label>
+                          <Label className="text-slate-700">Intake Session</Label>
                           <Select onValueChange={(v) => setValueA('gradSeason', v as any)}>
                             <SelectTrigger className="bg-white border-slate-200 text-slate-900 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-[#1A73E8]/30">
                               <SelectValue placeholder="Select session" />
