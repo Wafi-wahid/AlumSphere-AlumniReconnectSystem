@@ -314,15 +314,17 @@ export function LoginPage() {
                           <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.791 2.235-2.231 4.166-3.994 5.565l-.003-.002 6.19 5.238C39.231 36.349 44 30.667 44 24c0-1.341-.138-2.651-.389-3.917z"/>
                         </svg>
                       </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => { window.location.href = `${API_BASE}/auth/linkedin/login/start`; }}
-                        disabled={isLoading}
-                        aria-label="Continue with LinkedIn"
-                        className="p-2 h-10 w-10 rounded-full bg-white border-slate-200 text-slate-800 hover:bg-slate-50 flex items-center justify-center"
-                      >
-                        <Linkedin className="h-5 w-5 text-[#0077b5]" />
-                      </Button>
+                      {role === 'alumni' && (
+                        <Button
+                          variant="outline"
+                          onClick={() => { window.location.href = `${API_BASE}/auth/linkedin/login/start`; }}
+                          disabled={isLoading}
+                          aria-label="Continue with LinkedIn"
+                          className="p-2 h-10 w-10 rounded-full bg-white border-slate-200 text-slate-800 hover:bg-slate-50 flex items-center justify-center"
+                        >
+                          <Linkedin className="h-5 w-5 text-[#0077b5]" />
+                        </Button>
+                      )}
                     </div>
                   </>
                 )}

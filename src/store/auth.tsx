@@ -83,6 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       onboardingRequired: (user as any).onboardingRequired || false,
     };
     setUser(updatedUser);
+    // Navigate to home page after successful login
+    navigate('/');
     return updatedUser;
   };
 
