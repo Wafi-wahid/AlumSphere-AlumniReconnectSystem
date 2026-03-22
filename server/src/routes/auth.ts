@@ -178,15 +178,29 @@ authRouter.post('/register', async (req, res) => {
 });
 
 // POST /auth/login
-const loginSchema = z.object({ email: z.string().email(), password: z.string().min(8) });
+const loginSchema = z.object({ 
+  email: z.string().email(), 
+  password: z.string().min(8),
+  role: z.enum(['student', 'alumni', 'admin'])
+});
 
 authRouter.post('/login', async (req, res) => {
   try {
-    const { email, password } = loginSchema.parse(req.body);
+    const { email, password, role } = loginSchema.parse(req.body);
     const doc = await User.findOne({ email });
     if (!doc) return res.status(401).json({ error: 'Invalid credentials' });
     const ok = await bcrypt.compare(password, doc.passwordHash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+    
+    // Check if user role matches the selected role
+    // Allow both admin and super_admin to use admin login form
+    if (role === 'admin' && (doc.role === 'admin' || doc.role === 'super_admin')) {
+      // Admin form allows both admin and super_admin
+    } else if (doc.role !== role) {
+      return res.status(401).json({ 
+        error: `This account is registered as ${doc.role}. Please use the ${doc.role === 'super_admin' ? 'admin' : doc.role} login form.` 
+      });
+    }
 
     signAndSetCookie(res, { id: String(doc._id), role: doc.role });
     return res.json({ user: { id: String(doc._id), role: doc.role, name: doc.name, email: doc.email, profilePicture: doc.profilePicture } });

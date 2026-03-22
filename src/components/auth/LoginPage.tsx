@@ -279,7 +279,7 @@ export function LoginPage() {
                   onClick={async () => {
                     try {
                       setIsLoading(true);
-                      await login(email, password);
+                      await login(email, password, role);
                       toast.success("Logged in");
                     } catch (e: any) {
                       toast.error(e.message || "Login failed");

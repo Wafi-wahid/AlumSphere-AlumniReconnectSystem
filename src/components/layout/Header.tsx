@@ -140,6 +140,28 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     return () => unsub();
   }, [user?.id]);
 
+  // Event invitation notifications
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'notifications', String(user.id), 'items'), where('type', '==', 'event_invite'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const eventInvites = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      // Merge event invites with existing notifications
+      setNotifications((prev) => {
+        const prevMap = new Map(prev.map(n => [n.id, n]));
+        const eventInvitesMap = new Map(eventInvites.map(n => [n.id, n]));
+        
+        // Combine all notifications, prioritizing newer ones
+        const allNotifications = [...eventInvites, ...prev.filter(n => n.type !== 'event_invite')];
+        const sortedNotifications = allNotifications.sort((a, b) => b.createdAt - a.createdAt);
+        
+        return sortedNotifications.slice(0, 30); // Keep only last 30 notifications
+      });
+    });
+    return () => unsub();
+  }, [user?.id]);
+
   // Connection notifications: new requests and accepted
   const connLastRef = useRef<{ req: number; acc: number }>({ req: 0, acc: 0 });
   const [pendingReqCount, setPendingReqCount] = useState(0);

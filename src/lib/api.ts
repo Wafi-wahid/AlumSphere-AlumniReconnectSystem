@@ -51,7 +51,7 @@ export async function api<T = any>(path: string, options: RequestInit = {}, retr
 
 export const AuthAPI = {
   me: () => api<{ user: any }>("/auth/me"),
-  login: (payload: { email: string; password: string }) => api<{ user: any }>("/auth/login", { method: 'POST', body: JSON.stringify(payload) }),
+  login: (payload: { email: string; password: string; role: string }) => api<{ user: any }>("/auth/login", { method: 'POST', body: JSON.stringify(payload) }),
   logout: () => api<{ ok: boolean }>("/auth/logout", { method: 'POST' }),
   register: (payload: any) => api<{ user: any }>("/auth/register", { method: 'POST', body: JSON.stringify(payload) }),
 };
