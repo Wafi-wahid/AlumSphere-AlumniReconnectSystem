@@ -12,6 +12,9 @@ export interface IEvent {
   registrationLink?: string;
   postedBy: Types.ObjectId; // user who posted the event
   isActive: boolean;
+  maxAttendees?: number;
+  category?: string;
+  type?: string; // webinar, workshop, networking, etc.
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,6 +31,9 @@ const EventSchema = new Schema<IEvent>({
   registrationLink: { type: String },
   postedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   isActive: { type: Boolean, default: true },
+  maxAttendees: { type: Number },
+  category: { type: String },
+  type: { type: String },
 }, { timestamps: true });
 
 EventSchema.index({ tags: 1 });
