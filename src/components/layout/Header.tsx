@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAuth } from "@/store/auth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { db, auth } from "@/lib/firebase";
+import { db, auth, authReady } from "@/lib/firebase";
 import { collection, onSnapshot, query, where, updateDoc, setDoc, doc, arrayUnion, getDoc, deleteDoc, orderBy } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
@@ -250,28 +250,51 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
 
   // Bootstrap summary doc and ensure 'Login' badge is present on auth load
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         if (!user?.id) return;
-        if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+        await authReady;
+        if (cancelled) return;
+        if (!auth.currentUser) return;
         const sumRef = doc(db, 'users', user.id, 'gamification', 'summary');
         await setDoc(sumRef, { ownerUid: auth.currentUser?.uid || undefined, earnedBadges: arrayUnion('Login') }, { merge: true });
       } catch {}
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
-    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
-    const ref = doc(db, 'users', user.id, 'gamification', 'summary');
-    const unsub = onSnapshot(ref, (snap) => {
-      const d = snap.data() as any;
-      if (d && Array.isArray(d.earnedBadges)) {
-        const normalized: string[] = Array.from(new Set<string>(d.earnedBadges.map((x: any) => toCanonical(String(x)))));
-        setEarnedBadges(normalized);
-      } else setEarnedBadges([]);
-    });
-    return () => unsub();
+    let unsub: null | (() => void) = null;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await authReady;
+        if (cancelled) return;
+        if (!auth.currentUser) return;
+        const ref = doc(db, 'users', user.id, 'gamification', 'summary');
+        unsub = onSnapshot(ref, (snap) => {
+          const d = snap.data() as any;
+          if (d && Array.isArray(d.earnedBadges)) {
+            const normalized: string[] = Array.from(
+              new Set<string>(d.earnedBadges.map((x: any) => toCanonical(String(x))))
+            );
+            setEarnedBadges(normalized);
+          } else setEarnedBadges([]);
+        });
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
   }, [user?.id]);
 
   const goMessages = () => navigate({ pathname: "/", search: "?tab=messages" });
@@ -410,6 +433,26 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
         {/* User Actions */}
         {currentUser && (
           <div className="flex items-center gap-3">
+            {earnedBadges.length > 0 && (
+              <div className="hidden md:flex items-center gap-1.5">
+                {earnedBadges.slice(0, 4).map((b) => (
+                  <Tooltip key={b}>
+                    <TooltipTrigger asChild>
+                      <div className="w-2 h-2 bg-secondary rounded-full" />
+                    </TooltipTrigger>
+                    <TooltipContent>{b}</TooltipContent>
+                  </Tooltip>
+                ))}
+                {earnedBadges.length > 4 && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="w-2 h-2 bg-muted-foreground/40 rounded-full" />
+                    </TooltipTrigger>
+                    <TooltipContent>{earnedBadges.slice(4).join(", ")}</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative">
