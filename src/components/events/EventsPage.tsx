@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/store/auth";
 import { RecommendationTeaser } from "@/components/recommendations/RecommendationTeaser";
 import { db } from "@/lib/firebase";
-import { addDoc, collection, onSnapshot, query, setDoc, doc, collectionGroup, getDoc, updateDoc, serverTimestamp, arrayUnion, deleteDoc } from "firebase/firestore";
+import { addDoc, collection, onSnapshot, query, setDoc, doc, collectionGroup, getDoc, updateDoc, serverTimestamp, arrayUnion, deleteDoc, where } from "firebase/firestore";
 import { toast } from "sonner";
 import { collection as fsCollection, addDoc as fsAddDoc } from "firebase/firestore";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -228,7 +228,9 @@ export function EventsPage() {
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<any | null>(null);
+  const [myRegisteredEvents, setMyRegisteredEvents] = useState<any[]>([]);
   const [myRsvpEventIds, setMyRsvpEventIds] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<string>("upcoming");
   const [connections, setConnections] = useState<Array<{ id: string; name: string; avatar?: string }>>([]);
   const [referOpen, setReferOpen] = useState(false);
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
@@ -292,6 +294,17 @@ export function EventsPage() {
       const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
       // normalize to {id, name, avatar}
       setConnections(list.map((c: any) => ({ id: c.id, name: c.name || c.displayName || 'Connection', avatar: c.avatar || '' })));
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // Fetch user's registered events
+  useEffect(() => {
+    if (!user?.id) return;
+    const q = query(collection(db, "eventRegistrations"), where("userId", "==", user.id));
+    const unsub = onSnapshot(q, (snap) => {
+      const registrations = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setMyRegisteredEvents(registrations);
     });
     return () => unsub();
   }, [user?.id]);
@@ -770,14 +783,14 @@ export function EventsPage() {
                 </>
               ) : (
                 <>
-                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => setAdminTab(null)}>
+                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => setActiveTab('upcoming')}>
                     Browse Events
                   </Button>
-                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => setShowRegistrationModal(true)}>
-                    Register Now
+                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => setActiveTab('my-events')}>
+                    My Events
                   </Button>
-                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => setAdminTab('create')}>
-                    Host Event
+                  <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => setActiveTab('upcoming')}>
+                    Top Recommendations
                   </Button>
                 </>
               )}
@@ -1066,7 +1079,7 @@ export function EventsPage() {
 
       {/* Only show events when no admin tab is selected */}
       {!adminTab && (
-        <Tabs defaultValue="upcoming" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="upcoming" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">Upcoming Events</TabsTrigger>
           <TabsTrigger value="past" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white">Past Events</TabsTrigger>
@@ -1194,14 +1207,25 @@ export function EventsPage() {
         </TabsContent>
 
         <TabsContent value="my-events" className="space-y-4">
-          {/* RSVP'd events for this user */}
+          {/* Registered events for this user */}
           <div className="space-y-2">
-            <div className="text-sm font-medium">Your RSVPs</div>
-            {events.filter((e: any) => myRsvpEventIds.has(String(e.id))).length === 0 ? (
-              <Card><CardContent className="p-4 text-sm text-muted-foreground">No RSVPs yet</CardContent></Card>
+            <div className="text-sm font-medium">Your Registered Events</div>
+            {myRegisteredEvents.length === 0 ? (
+              <Card><CardContent className="p-4 text-sm text-muted-foreground">No registered events yet</CardContent></Card>
             ) : (
-              events.filter((e: any) => myRsvpEventIds.has(String(e.id))).map((e: any) => (
-                <Card key={e.id}><CardContent className="p-4 flex items-center justify-between"><div className="truncate"><div className="text-sm font-medium truncate">{e.title}</div><div className="text-xs text-muted-foreground truncate">{e.date} {e.time} · {e.type} · {e.location}</div></div><Badge variant="secondary">RSVP'd</Badge></CardContent></Card>
+              myRegisteredEvents.map((registration: any) => (
+                <Card key={registration.id}>
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="truncate">
+                      <div className="text-sm font-medium truncate">{registration.eventData.title}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {registration.eventData.date} {registration.eventData.time} · {registration.eventData.type} · {registration.eventData.location}
+                      </div>
+                      <div className="text-xs text-green-600 mt-1">Registered on {new Date(registration.registeredAt?.toDate?.() || registration.registeredAt).toLocaleDateString()}</div>
+                    </div>
+                    <Badge variant="default" className="bg-green-100 text-green-800">Registered</Badge>
+                  </CardContent>
+                </Card>
               ))
             )}
           </div>
@@ -1485,7 +1509,7 @@ export function EventsPage() {
           <DialogHeader>
             <DialogTitle>Event Registration</DialogTitle>
           </DialogHeader>
-          {selectedEventForRegistration && (
+          {selectedEventForRegistration && user && (
             <div className="space-y-6">
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="font-semibold text-lg">{selectedEventForRegistration.title}</h3>
@@ -1505,37 +1529,59 @@ export function EventsPage() {
                   </div>
                 </div>
               </div>
-              
-              <div className="space-y-4">
-                <h4 className="font-medium">Your Information</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium">Name</label>
-                    <Input value={user?.name || ''} disabled className="mt-1" />
+
+              {/* User Information Preview */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-blue-800 mb-3">Your Information</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="font-medium text-gray-600">Name:</span>
+                    <span className="text-gray-800">{user.name}</span>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium">Email</label>
-                    <Input value={user?.email || ''} disabled className="mt-1" />
+                  <div className="flex justify-between">
+                    <span className="font-medium text-gray-600">Email:</span>
+                    <span className="text-gray-800">{user.email}</span>
                   </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Additional Information (Optional)</label>
-                  <Textarea 
-                    placeholder="Any special requirements or questions about the event..."
-                    className="mt-1"
-                  />
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input type="checkbox" id="reminder" defaultChecked />
-                  <label htmlFor="reminder" className="text-sm">Send me event reminder via email</label>
+                  <div className="flex justify-between">
+                    <span className="font-medium text-gray-600">Role:</span>
+                    <span className="text-gray-800">{user.role}</span>
+                  </div>
                 </div>
               </div>
-              
-              <div className="flex gap-3">
+
+              {/* Consent Section */}
+              <div className="bg-yellow-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-yellow-800 mb-3">Registration Consent</h4>
+                <div className="space-y-3 text-sm text-gray-700">
+                  <p>By registering for this event, you agree to:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Receive event-related communications via email</li>
+                    <li>Share your registration information with the event organizer</li>
+                    <li>Attend the event at the scheduled time</li>
+                    <li>Follow event guidelines and code of conduct</li>
+                  </ul>
+                  <div className="mt-3 p-2 bg-white rounded border">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        id="event-consent"
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm">I agree to the terms and conditions above</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
                 <Button 
                   className="flex-1"
                   onClick={async () => {
-                    if (!user || !selectedEventForRegistration) return;
+                    const consentCheckbox = document.getElementById('event-consent') as HTMLInputElement;
+                    if (!consentCheckbox.checked) {
+                      toast.error('Please accept the terms and conditions to register.');
+                      return;
+                    }
                     
                     try {
                       // Save registration to database
@@ -1544,14 +1590,17 @@ export function EventsPage() {
                         userId: user.id,
                         userName: user.name,
                         userEmail: user.email,
-                        registeredAt: new Date(),
+                        userRole: user.role,
+                        registeredAt: serverTimestamp(),
                         status: 'registered',
+                        consent: true,
                         eventData: {
                           title: selectedEventForRegistration.title,
                           date: selectedEventForRegistration.date,
                           time: selectedEventForRegistration.time,
                           location: selectedEventForRegistration.location,
-                          type: selectedEventForRegistration.type
+                          type: selectedEventForRegistration.type,
+                          description: selectedEventForRegistration.description
                         }
                       });
                       
@@ -1564,14 +1613,24 @@ export function EventsPage() {
                       toast.success('Registration successful! Check your email for confirmation.');
                       setShowRegistrationModal(false);
                       setSelectedEventForRegistration(null);
+                      
+                      // Reset checkbox
+                      consentCheckbox.checked = false;
                     } catch (error) {
                       toast.error('Registration failed. Please try again.');
+                      console.error('Registration error:', error);
                     }
                   }}
                 >
                   Confirm Registration
                 </Button>
-                <Button variant="outline" onClick={() => setShowRegistrationModal(false)}>
+                <Button variant="outline" onClick={() => {
+                  setShowRegistrationModal(false);
+                  setSelectedEventForRegistration(null);
+                  // Reset checkbox
+                  const consentCheckbox = document.getElementById('event-consent') as HTMLInputElement;
+                  if (consentCheckbox) consentCheckbox.checked = false;
+                }}>
                   Cancel
                 </Button>
               </div>

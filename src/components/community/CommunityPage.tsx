@@ -41,6 +41,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { ContentModerator } from "@/lib/contentModeration";
 
 type Post = {
   id: string;
@@ -76,6 +77,7 @@ export function CommunityPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [posting, setPosting] = useState(false);
   const { toast } = useToast();
+  const contentModerator = ContentModerator.getInstance();
 
   const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined;
   const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string | undefined;
@@ -232,6 +234,22 @@ export function CommunityPage() {
   const handleCreatePost = async () => {
     if (!user) return;
     if (!newPost.trim() && !uploadFile && !articleUrl) return;
+    
+    // Validate content before submission
+    const contentToCheck = newPost.trim();
+    if (contentToCheck) {
+      const moderationResult = contentModerator.analyzeContent(contentToCheck);
+      
+      if (!moderationResult.isAllowed) {
+        toast({ 
+          title: "Post Not Allowed", 
+          description: contentModerator.getErrorMessage(moderationResult), 
+          variant: "destructive" 
+        });
+        return;
+      }
+    }
+    
     setPosting(true);
     let mediaUrl: string | undefined;
     try {
@@ -285,6 +303,18 @@ export function CommunityPage() {
     if (!user) return;
     const text = (commentInputs[post.id] || "").trim();
     if (!text) return;
+    
+    // Validate comment content
+    const moderationResult = contentModerator.analyzeContent(text);
+    if (!moderationResult.isAllowed) {
+      toast({ 
+        title: "Comment Not Allowed", 
+        description: contentModerator.getErrorMessage(moderationResult), 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     const refDoc = doc(db, "posts", post.id);
     const comment = {
       id: `${user.id}_${Date.now()}`,
@@ -475,6 +505,7 @@ export function CommunityPage() {
                 <li>• Keep content respectful and appropriate for all alumni</li>
                 <li>• No spam, promotional content, or unrelated material</li>
                 <li>• Give credit when sharing others' work or ideas</li>
+                <li>• <strong>Automated content moderation is active</strong> - inappropriate content will be blocked</li>
               </ul>
             </div>
 
@@ -485,6 +516,7 @@ export function CommunityPage() {
                 <li>• Respect diverse opinions and experiences</li>
                 <li>• No harassment, discrimination, or personal attacks</li>
                 <li>• Report inappropriate content to moderators</li>
+                <li>• <strong>Comments are also moderated</strong> - maintain professional tone</li>
               </ul>
             </div>
 
