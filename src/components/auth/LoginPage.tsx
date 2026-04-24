@@ -143,7 +143,7 @@ export function LoginPage() {
             <div className="relative z-10 h-full flex flex-col">
               <div>
                 <div className="flex items-center gap-3">
-                  <img src="/logo2.png" alt="AlumSphere" className="h-10 w-10 rounded-md object-cover" />
+                  <img src="/logo1.png" alt="AlumSphere" className="h-10 w-10 rounded-md object-cover" />
                   <span className="text-white text-xl font-bold tracking-tight">AlumSphere</span>
                 </div>
                 <h1 className="mt-6 text-4xl font-bold tracking-tight text-white">Connect with 2000+ Riphah Alumni</h1>
