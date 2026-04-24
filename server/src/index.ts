@@ -11,7 +11,7 @@ import { mentorshipRouter } from './routes/mentorship';
 import recommendationsRouter from './routes/recommendations';
 import { eventsRouter } from './routes/events';
 import bcrypt from 'bcryptjs';
-import './mongo';
+import { connectMongo } from './mongo';
 import { User } from './models/User';
 
 const app = express();
@@ -111,6 +111,7 @@ async function bootstrapSuperAdmin() {
 // Start server
 (async () => {
   try {
+    await connectMongo();
     await bootstrapSuperAdmin();
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

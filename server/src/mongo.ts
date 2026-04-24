@@ -2,16 +2,19 @@ import mongoose from 'mongoose';
 
 const uri = process.env.MONGODB_URI as string;
 
-if (!uri) {
-  console.warn('[mongo] MONGODB_URI is not set. Mongo connection will be skipped.');
-} else {
+export async function connectMongo() {
+  if (!uri) {
+    console.warn('[mongo] MONGODB_URI is not set. Mongo connection will be skipped.');
+    return;
+  }
+
   mongoose.set('strictQuery', true);
-  mongoose
-    .connect(uri, {
-      dbName: process.env.MONGODB_DB || 'echo-alum-link',
-    })
-    .then(() => console.log('[mongo] connected'))
-    .catch((err: unknown) => console.error('[mongo] connection error', err));
+  await mongoose.connect(uri, {
+    dbName: process.env.MONGODB_DB || 'echo-alum-link',
+    serverSelectionTimeoutMS: 30000,
+    socketTimeoutMS: 45000,
+  });
+  console.log('[mongo] connected');
 }
 
 export { mongoose };
