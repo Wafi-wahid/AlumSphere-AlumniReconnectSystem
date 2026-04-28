@@ -1,3 +1,5 @@
+import { getAuth } from 'firebase/auth';
+
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 function sleep(ms: number) {
@@ -13,10 +15,15 @@ export async function api<T = any>(path: string, options: RequestInit = {}, retr
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), timeoutMs);
     try {
+      // Get Firebase ID token if available
+      const auth = getAuth();
+      const token = await auth.currentUser?.getIdToken();
+      
       const res = await fetch(url, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
           ...(options.headers || {}),
         },
         ...options,
@@ -54,6 +61,7 @@ export const AuthAPI = {
   login: (payload: { email: string; password: string; role: string }) => api<{ user: any }>("/auth/login", { method: 'POST', body: JSON.stringify(payload) }),
   logout: () => api<{ ok: boolean }>("/auth/logout", { method: 'POST' }),
   register: (payload: any) => api<{ user: any }>("/auth/register", { method: 'POST', body: JSON.stringify(payload) }),
+  getFirebaseCustomToken: () => api<{ token: string }>("/auth/firebase/custom-token", { method: 'POST' }),
 };
 
 export const UsersAPI = {

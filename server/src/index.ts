@@ -13,6 +13,8 @@ import { eventsRouter } from './routes/events';
 import bcrypt from 'bcryptjs';
 import { connectMongo } from './mongo';
 import { User } from './models/User';
+import { initFirebaseAdmin } from './firebaseAdmin';
+import { firestoreSyncService } from './services/FirestoreSyncService';
 
 const app = express();
 
@@ -111,8 +113,15 @@ async function bootstrapSuperAdmin() {
 // Start server
 (async () => {
   try {
+    // Initialize Firebase Admin
+    initFirebaseAdmin();
+    
     await connectMongo();
     await bootstrapSuperAdmin();
+    
+    // Start MongoDB to Firestore sync service
+    await firestoreSyncService.start();
+    
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       if (isDev) {

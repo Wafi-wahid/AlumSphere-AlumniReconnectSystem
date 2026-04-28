@@ -188,7 +188,7 @@ export default function Register() {
   }, [setValueS, setValueA]);
 
   const startLinkedIn = () => {
-    window.location.href = `${API_BASE}/auth/linkedin/register/start`;
+    window.location.href = `${API_BASE}/auth/linkedin/register/start?role=${tab}`;
   };
 
   const onStudent = async (data: StudentForm) => {

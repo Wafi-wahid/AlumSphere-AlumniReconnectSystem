@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { AuthAPI, UsersAPI } from '@/lib/api';
 import { useNavigate } from 'react-router-dom';
+import { signInWithCustomToken, getAuth } from 'firebase/auth';
 
 export type Role = 'student' | 'alumni' | 'admin' | 'super_admin';
 
@@ -84,6 +85,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         onboardingRequired: (user as any).onboardingRequired || false,
       };
       setUser(updatedUser);
+      
+      // Get Firebase custom token and sign in to Firebase
+      try {
+        const { token } = await AuthAPI.getFirebaseCustomToken();
+        const auth = getAuth();
+        await signInWithCustomToken(auth, token);
+      } catch (firebaseError) {
+        console.warn('Firebase custom token sign-in failed, continuing without Firebase auth:', firebaseError);
+        // Non-fatal: continue with JWT auth only
+      }
+      
       // Navigate to home page after successful login
       navigate('/');
       return updatedUser;
