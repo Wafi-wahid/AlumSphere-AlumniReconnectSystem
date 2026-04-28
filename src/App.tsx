@@ -16,6 +16,7 @@ import Register from "@/pages/Register";
 import Profile from "@/pages/Profile";
 import { MessagesPage } from "@/components/messages/MessagesPage";
 import OnboardingFlow from "@/components/onboarding/OnboardingFlow";
+import { VideoMeeting } from "@/components/mentorship/VideoMeeting";
 
 // Create a wrapper component for protected routes
 const AuthWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -64,6 +65,7 @@ const App = () => (
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/messages" element={<MessagesPage />} />
                   <Route path="/mentorship" element={<Navigate to="/?tab=mentorship" replace />} />
+                  <Route path="/meeting/:roomId" element={<VideoMeeting />} />
                 </Route>
 
                 {/* Catch-all route */}

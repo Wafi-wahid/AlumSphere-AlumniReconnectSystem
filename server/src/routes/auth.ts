@@ -137,6 +137,9 @@ authRouter.get('/google/callback', async (req, res) => {
 const studentSchema = baseUserSchema.extend({
   role: z.literal('student'),
   sapId: z.string().regex(/^\d{5}$/, 'SAP ID must be exactly 5 digits'),
+  program: z.enum(['BS', 'BBA', 'MS', 'MBA', 'PhD', 'Other']),
+  customProgram: z.string().optional(),
+  department: z.string().min(2, 'Enter your department'),
   batchSeason: z.enum(['Spring', 'Fall']),
   batchYear: z.number().int().min(2010).max(2025),
   email: z.string().email().refine((email) => email.endsWith('@students.riphah.edu.pk'), {
@@ -146,6 +149,9 @@ const studentSchema = baseUserSchema.extend({
 
 const alumniSchema = baseUserSchema.extend({
   role: z.literal('alumni'),
+  program: z.enum(['BS', 'BBA', 'MS', 'MBA', 'PhD', 'Other']).optional(),
+  customProgram: z.string().optional(),
+  department: z.string().min(2, 'Enter your department').optional(),
   gradSeason: z.enum(['Spring', 'Fall']),
   gradYear: z.number().int().min(2010).max(2025),
   linkedinId: z.string().optional(),
@@ -185,6 +191,9 @@ authRouter.post('/register', async (req, res) => {
       passwordHash,
       role: parsed.role,
       sapId: 'sapId' in parsed ? (parsed as any).sapId : undefined,
+      program: 'program' in parsed ? (parsed as any).program === 'Other' ? (parsed as any).customProgram : (parsed as any).program : undefined,
+      customProgram: 'customProgram' in parsed ? (parsed as any).customProgram : undefined,
+      department: 'department' in parsed ? (parsed as any).department : undefined,
       batchSeason: 'batchSeason' in parsed ? (parsed as any).batchSeason : undefined,
       batchYear: 'batchYear' in parsed ? (parsed as any).batchYear : undefined,
       gradSeason: 'gradSeason' in parsed ? (parsed as any).gradSeason : undefined,

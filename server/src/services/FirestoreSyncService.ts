@@ -70,7 +70,7 @@ export class FirestoreSyncService {
       console.log(`[FirestoreSync] Found ${users.length} users to sync`);
       
       for (const doc of users) {
-        const docId = doc._id.toString();
+        const docId = (doc._id as any).toString();
         const firestorePath = `users/${docId}`;
 
         const userData = {
@@ -85,6 +85,9 @@ export class FirestoreSyncService {
           skills: Array.isArray(doc.skills) ? doc.skills : String(doc.skills || '').split(',').map((s: string) => s.trim()).filter(Boolean),
           mentorEligible: !!doc.mentorEligible,
           role: doc.role || 'student',
+          program: doc.program || '',
+          customProgram: (doc as any).customProgram || '',
+          department: (doc as any).department || '',
           sapId: doc.sapId || '',
           batchSeason: doc.batchSeason || '',
           batchYear: doc.batchYear || 0,
@@ -107,7 +110,7 @@ export class FirestoreSyncService {
       console.log(`[FirestoreSync] Found ${events.length} events to sync`);
       
       for (const doc of events) {
-        const docId = doc._id.toString();
+        const docId = (doc._id as any).toString();
         const firestorePath = `events/${docId}`;
 
         const eventData = {
@@ -125,7 +128,7 @@ export class FirestoreSyncService {
           maxAttendees: doc.maxAttendees || 0,
           category: doc.category || '',
           type: doc.type || '',
-          rsvps: Array.isArray(doc.rsvps) ? doc.rsvps.map((id: any) => id.toString()) : [],
+          rsvps: Array.isArray((doc as any).rsvps) ? (doc as any).rsvps.map((id: any) => id.toString()) : [],
           updatedAt: doc.updatedAt || new Date(),
           createdAt: doc.createdAt || new Date(),
         };
@@ -138,7 +141,7 @@ export class FirestoreSyncService {
       console.log(`[FirestoreSync] Found ${mentorProfiles.length} mentor profiles to sync`);
       
       for (const doc of mentorProfiles) {
-        const docId = doc._id.toString();
+        const docId = (doc._id as any).toString();
         const firestorePath = `mentors/${docId}`;
 
         const mentorData = {
@@ -149,7 +152,7 @@ export class FirestoreSyncService {
           mentorSkills: Array.isArray(doc.mentorSkills) ? doc.mentorSkills : [],
           mentorshipGoals: Array.isArray(doc.mentorshipGoals) ? doc.mentorshipGoals : [],
           preferredCommunication: doc.preferredCommunication || '',
-          bio: doc.bio || '',
+          bio: (doc as any).bio || '',
           experienceYears: doc.experienceYears || 0,
           currentCompany: doc.currentCompany || '',
           profileHeadline: doc.profileHeadline || '',
@@ -197,7 +200,7 @@ export class FirestoreSyncService {
 
     stream.on('change', async (change) => {
       try {
-        const docId = change.documentKey._id.toString();
+        const docId = (change.documentKey._id as any).toString();
         const firestorePath = `users/${docId}`;
 
         switch (change.operationType) {
@@ -219,6 +222,9 @@ export class FirestoreSyncService {
               skills: Array.isArray(doc.skills) ? doc.skills : String(doc.skills || '').split(',').map((s: string) => s.trim()).filter(Boolean),
               mentorEligible: !!doc.mentorEligible,
               role: doc.role || 'student',
+              program: doc.program || '',
+              customProgram: (doc as any).customProgram || '',
+              department: (doc as any).department || '',
               sapId: doc.sapId || '',
               batchSeason: doc.batchSeason || '',
               batchYear: doc.batchYear || 0,
@@ -264,7 +270,7 @@ export class FirestoreSyncService {
 
     stream.on('change', async (change) => {
       try {
-        const docId = change.documentKey._id.toString();
+        const docId = (change.documentKey._id as any).toString();
         const firestorePath = `events/${docId}`;
 
         switch (change.operationType) {
@@ -289,7 +295,7 @@ export class FirestoreSyncService {
               maxAttendees: doc.maxAttendees || 0,
               category: doc.category || '',
               type: doc.type || '',
-              rsvps: Array.isArray(doc.rsvps) ? doc.rsvps.map((id: any) => id.toString()) : [],
+              rsvps: Array.isArray((doc as any).rsvps) ? (doc as any).rsvps.map((id: any) => id.toString()) : [],
               updatedAt: doc.updatedAt || new Date(),
               createdAt: doc.createdAt || new Date(),
             };
@@ -325,7 +331,7 @@ export class FirestoreSyncService {
 
     stream.on('change', async (change) => {
       try {
-        const docId = change.documentKey._id.toString();
+        const docId = (change.documentKey._id as any).toString();
         const firestorePath = `mentors/${docId}`;
 
         switch (change.operationType) {
@@ -343,7 +349,7 @@ export class FirestoreSyncService {
               mentorSkills: Array.isArray(doc.mentorSkills) ? doc.mentorSkills : [],
               mentorshipGoals: Array.isArray(doc.mentorshipGoals) ? doc.mentorshipGoals : [],
               preferredCommunication: doc.preferredCommunication || '',
-              bio: doc.bio || '',
+              bio: (doc as any).bio || '',
               experienceYears: doc.experienceYears || 0,
               currentCompany: doc.currentCompany || '',
               profileHeadline: doc.profileHeadline || '',

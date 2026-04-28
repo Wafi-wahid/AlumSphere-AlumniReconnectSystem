@@ -15,6 +15,7 @@ import { connectMongo } from './mongo';
 import { User } from './models/User';
 import { initFirebaseAdmin } from './firebaseAdmin';
 import { firestoreSyncService } from './services/FirestoreSyncService';
+import { startMentorshipReminderService } from './services/MentorshipReminderService';
 
 const app = express();
 
@@ -121,6 +122,9 @@ async function bootstrapSuperAdmin() {
     
     // Start MongoDB to Firestore sync service
     await firestoreSyncService.start();
+
+    // Start mentorship reminder job
+    startMentorshipReminderService();
     
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

@@ -23,6 +23,7 @@ import { doc, onSnapshot, getDoc, setDoc, collection, query, where, limit } from
 
 const years = Array.from({ length: 2025 - 2010 + 1 }, (_, i) => 2010 + i);
 const seasons = ["Spring", "Fall"] as const;
+const programs = ["BS", "BBA", "MS", "MBA", "PhD", "Other"] as const;
 
 const schema = z.object({
   name: z.string().min(2, "Enter full name"),
@@ -33,6 +34,8 @@ const schema = z.object({
     .optional()
     .or(z.literal("")),
   program: z.string().min(2, "Select or enter program"),
+  customProgram: z.string().optional(),
+  department: z.string().min(2, "Enter your department"),
   batchSeason: z.enum(seasons),
   batchYear: z.coerce.number().int().min(2010).max(2025),
   currentCompany: z.string().optional().or(z.literal("")),
@@ -121,6 +124,8 @@ export default function Profile() {
           name: user.name || "",
           profilePicture: user.profilePicture || "",
           program: user.program || "",
+          customProgram: user.customProgram || "",
+          department: user.department || "",
           batchSeason: user.batchSeason || "Spring",
           batchYear: user.batchYear || 2010,
           currentCompany: user.currentCompany || "",
@@ -702,46 +707,37 @@ export default function Profile() {
                   </div>
                 </div>
 
-                {/* Section 2: Academic details (Department/Session) */}
+                {/* Section 2: Academic details (Program/Session) */}
                 <SectionMarker label="section 2: acedemics detail" missing={missingS2} />
-                <div className="grid md:grid-cols-3 gap-3">
+                <div className="grid md:grid-cols-2 gap-3">
                   <div className="grid gap-2">
-                    <Label>Department</Label>
-                    <div className="relative">
-                      <Input className="pr-10" placeholder="Software Engineering" {...register("program")}
-                        onFocus={()=>setDepartmentMenu(true)}
-                        onBlur={()=>setTimeout(()=>setDepartmentMenu(false),120)}
-                      />
-                      <button
-                        type="button"
-                        className="absolute inset-y-0 right-0 px-2 text-muted-foreground hover:text-foreground"
-                        aria-label="Department templates"
-                        onMouseDown={(e)=>{ e.preventDefault(); setDepartmentMenu((v)=>!v); }}
-                      >
-                        <Sparkles className="h-5 w-5" />
-                      </button>
-                      {departmentMenu && (
-                        <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow-sm max-h-56 overflow-auto">
-                          {(() => {
-                            const current = (watch('program') || '').trim();
-                            const first = templates.departments.filter((d) => current && d === current);
-                            const rest = templates.departments.filter((d) => !current || d !== current);
-                            return [...first, ...rest].map((dep) => (
-                              <button
-                                type="button"
-                                key={dep}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                                onMouseDown={(e)=>{ e.preventDefault(); setValue('program', dep); setDepartmentMenu(false);} }
-                              >
-                                {dep}
-                              </button>
-                            ));
-                          })()}
-                        </div>
-                      )}
-                    </div>
+                    <Label>Program</Label>
+                    <Select value={String(watch("program") || "")} onValueChange={(v) => setValue("program", v as any)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select program" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {programs.map((p) => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     {errors.program && <p className="text-xs text-destructive">{errors.program.message}</p>}
                   </div>
+                  <div className="grid gap-2">
+                    <Label>Department</Label>
+                    <Input placeholder="e.g., Software Engineering" {...register("department")} />
+                    {errors.department && <p className="text-xs text-destructive">{errors.department.message}</p>}
+                  </div>
+                </div>
+                {watch("program") === 'Other' && (
+                  <div className="grid gap-2">
+                    <Label>Specify Program</Label>
+                    <Input placeholder="e.g., BSCS, BBA, etc." {...register("customProgram")} />
+                    {errors.customProgram && <p className="text-xs text-destructive">{errors.customProgram.message}</p>}
+                  </div>
+                )}
+                <div className="grid md:grid-cols-2 gap-3">
                   <div className="grid gap-2">
                     <Label>Session</Label>
                     <Select value={String(watch("batchSeason") || "")} onValueChange={(v) => setValue("batchSeason", v as any)}>

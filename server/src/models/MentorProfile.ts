@@ -52,6 +52,5 @@ MentorProfileSchema.index({ mentorEligible: 1, availableToMentor: 1 });
 MentorProfileSchema.index({ mentorIndustries: 1 });
 MentorProfileSchema.index({ mentorInterests: 1 });
 MentorProfileSchema.index({ mentorSkills: 1 });
-MentorProfileSchema.index({ userId: 1 }, { unique: true });
 
 export const MentorProfile = model<IMentorProfile>('MentorProfile', MentorProfileSchema);

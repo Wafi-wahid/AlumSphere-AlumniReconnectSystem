@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useRef, useState } from 'react';
+import { useForm } from 'react-hook-form';
 
 type ProfileStepProps = {
   formData: OnboardingFormData;
@@ -14,6 +16,7 @@ type ProfileStepProps = {
 const ProfileStep = ({ formData, updateFormData }: ProfileStepProps) => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const programs = ["BS", "BBA", "MS", "MBA", "PhD", "Other"] as const;
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -78,6 +81,48 @@ const ProfileStep = ({ formData, updateFormData }: ProfileStepProps) => {
               required
             />
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="program">Program (optional)</Label>
+              <Select
+                value={formData.program}
+                onValueChange={(value) => updateFormData({ program: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select your program" />
+                </SelectTrigger>
+                <SelectContent>
+                  {programs.map((program) => (
+                    <SelectItem key={program} value={program}>
+                      {program}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="department">Department (optional)</Label>
+              <Input
+                id="department"
+                value={formData.department || ''}
+                onChange={(e) => updateFormData({ department: e.target.value })}
+                placeholder="e.g., Software Engineering"
+              />
+            </div>
+          </div>
+
+          {formData.program === 'Other' && (
+            <div className="space-y-2">
+              <Label htmlFor="customProgram">Specify Program</Label>
+              <Input
+                id="customProgram"
+                value={formData.customProgram || ''}
+                onChange={(e) => updateFormData({ customProgram: e.target.value })}
+                placeholder="e.g., BSCS, BBA, etc."
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="bio">Bio</Label>

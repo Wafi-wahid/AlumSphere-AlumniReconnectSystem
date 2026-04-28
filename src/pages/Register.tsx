@@ -17,6 +17,7 @@ import { api } from "@/lib/api";
 
 const years = Array.from({ length: 2025 - 2010 + 1 }, (_, i) => 2010 + i);
 const seasons = ["Spring", "Fall"] as const;
+const programs = ["BS", "BBA", "MS", "MBA", "PhD", "Other"] as const;
 
 const baseSchema = {
   name: z.string().min(2, "Enter full name"),
@@ -32,12 +33,24 @@ const studentSchema = z
   .object({
     ...baseSchema,
     sapId: z.string().regex(/^\d{5}$/i, "SAP ID must be exactly 5 digits"),
+    program: z.enum(programs, { required_error: "Select your program" }),
+    customProgram: z.string().optional(),
+    department: z.string().min(2, "Enter your department"),
     batchSeason: z.enum(seasons),
     batchYear: z.coerce.number().int().min(2010).max(2025),
   })
   .refine((data) => data.password === data.confirmPassword, {
     path: ["confirmPassword"],
     message: "Passwords do not match",
+  })
+  .refine((data) => {
+    if (data.program === 'Other' && !data.customProgram) {
+      return false;
+    }
+    return true;
+  }, {
+    path: ["customProgram"],
+    message: "Please specify your program",
   });
 
 type StudentForm = z.infer<typeof studentSchema>;
@@ -45,6 +58,9 @@ type StudentForm = z.infer<typeof studentSchema>;
 const alumniSchema = z
   .object({
     ...baseSchema,
+    program: z.enum(programs).optional(),
+    customProgram: z.string().optional(),
+    department: z.string().min(2, "Enter your department").optional(),
     gradSeason: z.enum(seasons),
     gradYear: z.coerce.number().int().min(2010).max(2025),
     linkedinId: z.string().optional(),
@@ -52,6 +68,15 @@ const alumniSchema = z
   .refine((data) => data.password === data.confirmPassword, {
     path: ["confirmPassword"],
     message: "Passwords do not match",
+  })
+  .refine((data) => {
+    if (data.program === 'Other' && !data.customProgram) {
+      return false;
+    }
+    return true;
+  }, {
+    path: ["customProgram"],
+    message: "Please specify your program",
   });
 
 type AlumniForm = z.infer<typeof alumniSchema>;
@@ -140,6 +165,7 @@ export default function Register() {
     register: regS,
     handleSubmit: handleSubmitS,
     setValue: setValueS,
+    watch: watchS,
     formState: { errors: errorsS, isSubmitting: submittingS },
   } = useForm<StudentForm>({ resolver: zodResolver(studentSchema) });
 
@@ -147,6 +173,7 @@ export default function Register() {
     register: regA,
     handleSubmit: handleSubmitA,
     setValue: setValueA,
+    watch: watchA,
     formState: { errors: errorsA, isSubmitting: submittingA },
   } = useForm<AlumniForm>({ resolver: zodResolver(alumniSchema) });
 
@@ -199,6 +226,8 @@ export default function Register() {
         password: data.password,
         role: "student",
         sapId: data.sapId,
+        program: data.program === 'Other' ? data.customProgram : data.program,
+        department: data.department,
         batchSeason: data.batchSeason,
         batchYear: data.batchYear,
       });
@@ -216,6 +245,8 @@ export default function Register() {
         email: data.email,
         password: data.password,
         role: "alumni",
+        program: data.program === 'Other' ? data.customProgram : data.program,
+        department: data.department,
         gradSeason: data.gradSeason,
         gradYear: data.gradYear,
         linkedinId: data.linkedinId || undefined,
@@ -343,6 +374,34 @@ export default function Register() {
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="grid gap-2">
+                          <Label className="text-slate-700">Program</Label>
+                          <Select onValueChange={(v) => setValueS('program', v as any)}>
+                            <SelectTrigger className="bg-white border-slate-200 text-slate-900 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-[#1A73E8]/30">
+                              <SelectValue placeholder="Select program" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {programs.map((p) => (
+                                <SelectItem key={p} value={p}>{p}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {errorsS.program && <p className="text-xs text-destructive">{errorsS.program.message as any}</p>}
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="s_department" className="text-slate-700">Department</Label>
+                          <Input id="s_department" placeholder="e.g., Software Engineering" {...regS('department')} className="bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-[#1A73E8]/30 focus:border-[#1A73E8]" />
+                          {errorsS.department && <p className="text-xs text-destructive">{errorsS.department.message as any}</p>}
+                        </div>
+                      </div>
+                      {watchS('program') === 'Other' && (
+                        <div className="grid gap-2">
+                          <Label htmlFor="s_custom_program" className="text-slate-700">Specify Program</Label>
+                          <Input id="s_custom_program" placeholder="e.g., BSCS, BBA, etc." {...regS('customProgram')} className="bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-[#1A73E8]/30 focus:border-[#1A73E8]" />
+                          {errorsS.customProgram && <p className="text-xs text-destructive">{errorsS.customProgram.message as any}</p>}
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid gap-2">
                           <Label className="text-slate-700">Intake Session</Label>
                           <Select onValueChange={(v) => setValueS('batchSeason', v as any)}>
                             <SelectTrigger className="bg-white border-slate-200 text-slate-900 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-[#1A73E8]/30">
@@ -432,6 +491,33 @@ export default function Register() {
                           {errorsA.confirmPassword && <p className="text-xs text-destructive">{errorsA.confirmPassword.message as any}</p>}
                         </div>
                       </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="grid gap-2">
+                          <Label className="text-slate-700">Program (optional)</Label>
+                          <Select onValueChange={(v) => setValueA('program', v as any)}>
+                            <SelectTrigger className="bg-white border-slate-200 text-slate-900 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-[#1A73E8]/30">
+                              <SelectValue placeholder="Select program" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {programs.map((p) => (
+                                <SelectItem key={p} value={p}>{p}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="a_department" className="text-slate-700">Department (optional)</Label>
+                          <Input id="a_department" placeholder="e.g., Software Engineering" {...regA('department')} className="bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-[#1A73E8]/30 focus:border-[#1A73E8]" />
+                          {errorsA.department && <p className="text-xs text-destructive">{errorsA.department.message as any}</p>}
+                        </div>
+                      </div>
+                      {watchA('program') === 'Other' && (
+                        <div className="grid gap-2">
+                          <Label htmlFor="a_custom_program" className="text-slate-700">Specify Program</Label>
+                          <Input id="a_custom_program" placeholder="e.g., BSCS, BBA, etc." {...regA('customProgram')} className="bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-[#1A73E8]/30 focus:border-[#1A73E8]" />
+                          {errorsA.customProgram && <p className="text-xs text-destructive">{errorsA.customProgram.message as any}</p>}
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-3">
                         <div className="grid gap-2">
                           <Label className="text-slate-700">Intake Session</Label>
