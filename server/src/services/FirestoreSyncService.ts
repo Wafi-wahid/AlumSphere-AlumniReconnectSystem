@@ -38,6 +38,9 @@ export class FirestoreSyncService {
     this.isRunning = true;
 
     try {
+      // Initial sync of existing data
+      await this.initialSync();
+      
       // Start User collection sync
       this.syncUsers();
       
@@ -51,6 +54,116 @@ export class FirestoreSyncService {
     } catch (error) {
       console.error('[FirestoreSync] Failed to start sync service:', error);
       this.stop();
+      throw error;
+    }
+  }
+
+  /**
+   * Initial sync of all existing MongoDB data to Firestore
+   */
+  private async initialSync() {
+    console.log('[FirestoreSync] Starting initial sync of existing data...');
+
+    try {
+      // Sync all existing users
+      const users = await User.find().lean();
+      console.log(`[FirestoreSync] Found ${users.length} users to sync`);
+      
+      for (const doc of users) {
+        const docId = doc._id.toString();
+        const firestorePath = `users/${docId}`;
+
+        const userData = {
+          name: doc.name || '',
+          email: doc.email || '',
+          avatar: doc.profilePicture || '',
+          profilePicture: doc.profilePicture || '',
+          currentCompany: doc.currentCompany || '',
+          profileHeadline: doc.profileHeadline || '',
+          location: doc.location || '',
+          experienceYears: doc.experienceYears || 0,
+          skills: Array.isArray(doc.skills) ? doc.skills : String(doc.skills || '').split(',').map((s: string) => s.trim()).filter(Boolean),
+          mentorEligible: !!doc.mentorEligible,
+          role: doc.role || 'student',
+          sapId: doc.sapId || '',
+          batchSeason: doc.batchSeason || '',
+          batchYear: doc.batchYear || 0,
+          gradSeason: doc.gradSeason || '',
+          gradYear: doc.gradYear || 0,
+          linkedinId: doc.linkedinId || '',
+          bio: doc.bio || '',
+          onboardingCompleted: doc.onboardingCompleted || false,
+          onboardingRequired: doc.onboardingRequired || false,
+          onboardingStep: doc.onboardingStep || 0,
+          updatedAt: doc.updatedAt || new Date(),
+          createdAt: doc.createdAt || new Date(),
+        };
+
+        await this.db.doc(firestorePath).set(userData, { merge: true });
+      }
+
+      // Sync all existing events
+      const events = await Event.find().lean();
+      console.log(`[FirestoreSync] Found ${events.length} events to sync`);
+      
+      for (const doc of events) {
+        const docId = doc._id.toString();
+        const firestorePath = `events/${docId}`;
+
+        const eventData = {
+          title: doc.title || '',
+          description: doc.description || '',
+          date: doc.date || null,
+          location: doc.location || '',
+          isVirtual: doc.isVirtual || false,
+          tags: Array.isArray(doc.tags) ? doc.tags : [],
+          industry: doc.industry || '',
+          organizer: doc.organizer || '',
+          registrationLink: doc.registrationLink || '',
+          postedBy: doc.postedBy?.toString() || '',
+          isActive: doc.isActive !== undefined ? doc.isActive : true,
+          maxAttendees: doc.maxAttendees || 0,
+          category: doc.category || '',
+          type: doc.type || '',
+          rsvps: Array.isArray(doc.rsvps) ? doc.rsvps.map((id: any) => id.toString()) : [],
+          updatedAt: doc.updatedAt || new Date(),
+          createdAt: doc.createdAt || new Date(),
+        };
+
+        await this.db.doc(firestorePath).set(eventData, { merge: true });
+      }
+
+      // Sync all existing mentor profiles
+      const mentorProfiles = await MentorProfile.find().lean();
+      console.log(`[FirestoreSync] Found ${mentorProfiles.length} mentor profiles to sync`);
+      
+      for (const doc of mentorProfiles) {
+        const docId = doc._id.toString();
+        const firestorePath = `mentors/${docId}`;
+
+        const mentorData = {
+          userId: doc.userId?.toString() || '',
+          mentorEligible: doc.mentorEligible || false,
+          availableToMentor: doc.availableToMentor || false,
+          mentorIndustries: Array.isArray(doc.mentorIndustries) ? doc.mentorIndustries : [],
+          mentorSkills: Array.isArray(doc.mentorSkills) ? doc.mentorSkills : [],
+          mentorshipGoals: Array.isArray(doc.mentorshipGoals) ? doc.mentorshipGoals : [],
+          preferredCommunication: doc.preferredCommunication || '',
+          bio: doc.bio || '',
+          experienceYears: doc.experienceYears || 0,
+          currentCompany: doc.currentCompany || '',
+          profileHeadline: doc.profileHeadline || '',
+          location: doc.location || '',
+          updatedAt: doc.updatedAt || new Date(),
+          createdAt: doc.createdAt || new Date(),
+        };
+
+        await this.db.doc(firestorePath).set(mentorData, { merge: true });
+      }
+
+      console.log('[FirestoreSync] Initial sync completed successfully');
+    } catch (error) {
+      console.error('[FirestoreSync] Initial sync failed:', error);
       throw error;
     }
   }
