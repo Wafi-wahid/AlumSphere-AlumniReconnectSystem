@@ -145,9 +145,6 @@ userRouter.patch('/me', requireAuth, async (req, res) => {
   const currentUser = current as unknown as IUser & { _id: Types.ObjectId };
   
   const data: Partial<IUser> = { ...parsed.data };
-  if (typeof parsed.data.experienceYears === 'number') {
-    data.mentorEligible = parsed.data.experienceYears >= 4;
-  }
 
   // Create a candidate object with merged data for validation
   const candidate = { ...currentUser, ...data };
@@ -175,6 +172,31 @@ userRouter.patch('/me', requireAuth, async (req, res) => {
     (data as any).onboardingRequired = false;
   }
 
+  // Recompute mentor eligibility from the combined rule:
+  // - role is student or alumni
+  // - onboardingCompleted is true
+  // - mentorshipPreferences.availableToMentor is true
+  // - experienceYears >= 4
+  const mentorEligibilityInputsChanged = [
+    'experienceYears',
+    'mentorshipPreferences',
+    'onboardingCompleted',
+    'role',
+  ].some((k) => k in parsed.data);
+  if (mentorEligibilityInputsChanged) {
+    const nextRole = (data.role ?? currentUser.role) as any;
+    const nextOnboardingCompleted = (data.onboardingCompleted ?? currentUser.onboardingCompleted) === true;
+    const nextExperienceYears = (data.experienceYears ?? currentUser.experienceYears) ?? 0;
+    const nextMentorshipPrefs = (data.mentorshipPreferences ?? currentUser.mentorshipPreferences) as any;
+    const availableToMentor = nextMentorshipPrefs?.availableToMentor === true;
+
+    data.mentorEligible =
+      ['student', 'alumni'].includes(String(nextRole)) &&
+      nextOnboardingCompleted &&
+      availableToMentor &&
+      Number(nextExperienceYears) >= 4;
+  }
+
   // Update the user with the new data
   const updatedUser = await User.findByIdAndUpdate(
     userId, 
@@ -193,6 +215,8 @@ userRouter.patch('/me', requireAuth, async (req, res) => {
     'interests',
     'skills',
     'mentorshipPreferences',
+    'mentorEligible',
+    'onboardingCompleted',
   ].some(k => k in parsed.data);
   if (mentorFieldsChanged) {
     await syncMentorProfile(updatedUser as any);

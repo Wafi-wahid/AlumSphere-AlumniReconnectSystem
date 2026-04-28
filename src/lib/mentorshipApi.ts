@@ -33,5 +33,8 @@ export const MentorshipAPI = {
     notes?: string;
   }) => request<{ ok: boolean; id: string }>(`/mentorshipRequests`, { method: 'POST', body: JSON.stringify(payload) }),
   listMyRequests: (as: 'student'|'mentor' = 'student') => request<{ items: any[]; nextPage?: number }>(`/mentorshipRequests?as=${as}`),
-  updateRequest: (id: string, status: 'Accepted'|'Declined'|'Cancelled') => request<{ ok: boolean }>(`/mentorshipRequests/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  updateRequest: (id: string, payload: { status: 'Accepted'|'Declined'|'Cancelled'; scheduledAt?: string }) => request<{ ok: boolean }>(`/mentorshipRequests/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  cancelSession: (sessionId: string) => request<{ ok: boolean }>(`/mentorshipSessions/${sessionId}`, { method: 'DELETE' }),
+  rateSession: (sessionId: string, payload: { rating: number; feedback?: string }) => request<{ ok: boolean }>(`/mentorshipSessions/${sessionId}/rating`, { method: 'POST', body: JSON.stringify(payload) }),
+  leaderboard: (limit = 10) => request<{ items: any[] }>(`/mentorship/leaderboard?limit=${encodeURIComponent(String(limit))}`),
 };

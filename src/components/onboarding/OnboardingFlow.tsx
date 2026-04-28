@@ -17,6 +17,9 @@ import { toast } from '@/hooks/use-toast';
 
 export interface OnboardingFormData {
   name: string;
+  program?: string;
+  customProgram?: string;
+  department?: string;
   profilePicture?: string;
   bio?: string;
   interests: string[];

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +11,7 @@ import { useAuth } from "@/store/auth";
 import { toast } from "sonner";
 
 export function LoginPage() {
+  const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [role, setRole] = useState<"student" | "alumni" | "admin">("student");
   const [email, setEmail] = useState("");
@@ -105,6 +107,16 @@ export function LoginPage() {
       setShowGuide(true);
     }
   }, []);
+
+  // Show OAuth error from URL if present
+  useEffect(() => {
+    const error = searchParams.get('error');
+    if (error) {
+      toast.error(error);
+      // Clear the error from URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [searchParams]);
 
   const handleLinkedInLogin = () => {
     setIsLoading(true);
@@ -302,7 +314,7 @@ export function LoginPage() {
                     <div className="flex items-center gap-3 justify-center">
                       <Button
                         variant="outline"
-                        onClick={() => { window.location.href = `${API_BASE}/auth/google/start`; }}
+                        onClick={() => { window.location.href = `${API_BASE}/auth/google/start?role=${role}`; }}
                         disabled={isLoading}
                         aria-label="Continue with Google"
                         className="p-2 h-10 w-10 rounded-full bg-white border-slate-200 text-slate-800 hover:bg-slate-50 flex items-center justify-center"
@@ -317,7 +329,7 @@ export function LoginPage() {
                       {role === 'alumni' && (
                         <Button
                           variant="outline"
-                          onClick={() => { window.location.href = `${API_BASE}/auth/linkedin/login/start`; }}
+                          onClick={() => { window.location.href = `${API_BASE}/auth/linkedin/login/start?role=${role}`; }}
                           disabled={isLoading}
                           aria-label="Continue with LinkedIn"
                           className="p-2 h-10 w-10 rounded-full bg-white border-slate-200 text-slate-800 hover:bg-slate-50 flex items-center justify-center"

@@ -430,6 +430,18 @@ export function AlumniDirectory() {
     // Filter for connections only if enabled
     const matchesConnection = !showConnectionsOnly || acceptedIds.has(String(alumni.id));
     
+    // Check if more than one field is missing (excluding name)
+    const missingFields = [
+      !alumni.role || String(alumni.role).trim() === "",
+      !alumni.company || String(alumni.company).trim() === "",
+      !alumni.department || String(alumni.department).trim() === "",
+      !alumni.location || String(alumni.location).trim() === "",
+      !alumni.graduationYear || String(alumni.graduationYear).trim() === ""
+    ].filter(Boolean).length;
+    
+    // Hide if more than one field is missing
+    if (missingFields > 1) return false;
+    
     return matchAudience && matchesSearch && matchesYear && matchesDepartment && matchesLocation && matchesCompany && matchesSkill && matchesConnection;
   });
 
@@ -723,18 +735,18 @@ export function AlumniDirectory() {
                         <Badge variant="secondary" className="text-xs">LinkedIn</Badge>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground">{alumni.role}</p>
+                    <p className="text-sm text-muted-foreground">{alumni.role || "-"}</p>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <Briefcase className="h-3 w-3" />
-                      {alumni.company}
+                      {alumni.company || "-"}
                     </div>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <GraduationCap className="h-3 w-3" />
-                      {alumni.department} &apos;{String(alumni.graduationYear || "").slice(-2)}
+                      {alumni.department || "-"} &apos;{String(alumni.graduationYear || "").slice(-2) || "-"}
                     </div>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <MapPin className="h-3 w-3" />
-                      {alumni.location}
+                      {alumni.location || "-"}
                     </div>
                   </div>
                 </div>

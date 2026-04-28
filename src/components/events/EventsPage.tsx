@@ -1109,9 +1109,9 @@ export function EventsPage() {
                             <div className="flex items-center gap-2">
                               <Avatar className="h-6 w-6">
                                 <AvatarImage src={event.hostAvatar} alt={event.host} />
-                                <AvatarFallback>{event.host[0]}</AvatarFallback>
+                                <AvatarFallback>{event.host?.[0] || '?'}</AvatarFallback>
                               </Avatar>
-                              <p className="text-sm text-muted-foreground">Hosted by {event.host}</p>
+                              <p className="text-sm text-muted-foreground">Hosted by {event.host || 'Unknown'}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1181,7 +1181,7 @@ export function EventsPage() {
                 <div className="flex items-start justify-between">
                   <div className="space-y-2">
                     <h3 className="font-semibold">{event.title}</h3>
-                    <p className="text-sm text-muted-foreground">Hosted by {event.host}</p>
+                    <p className="text-sm text-muted-foreground">Hosted by {event.host || 'Unknown'}</p>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         {event.date}

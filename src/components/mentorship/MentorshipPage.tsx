@@ -87,6 +87,14 @@ export function MentorshipPage() {
   const [showRequestDialog, setShowRequestDialog] = useState(false);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
+  const [scheduledDateTime, setScheduledDateTime] = useState('');
+  const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<any | null>(null);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackTemplate, setFeedbackTemplate] = useState('');
   const [currentTab, setCurrentTab] = useState<'find'|'requests'|'sessions'>('find');
   const searchSectionRef = useRef<HTMLDivElement | null>(null);
 
@@ -131,6 +139,67 @@ export function MentorshipPage() {
     setCompanyFilter('');
     setDepartment('all');
     setRatingMin('all');
+  };
+
+  const handleOpenScheduleDialog = (request: any) => {
+    setSelectedRequest(request);
+    setScheduledDateTime(request.preferredDateTime ? new Date(request.preferredDateTime).toISOString().slice(0, 16) : '');
+    setShowScheduleDialog(true);
+  };
+
+  const handleScheduleSession = async () => {
+    if (!selectedRequest) return;
+    try {
+      const scheduledAt = scheduledDateTime || selectedRequest.preferredDateTime;
+      await MentorshipAPI.updateRequest(selectedRequest.id, { status: 'Accepted', scheduledAt });
+      toast({ title: 'Session Scheduled' });
+      setShowScheduleDialog(false);
+      setSelectedRequest(null);
+      setScheduledDateTime('');
+      const fresh = await MentorshipAPI.listMyRequests('mentor');
+      setMyRequests(Array.isArray(fresh.items) ? fresh.items : []);
+    } catch (e: any) {
+      toast({ title: 'Failed to schedule', description: e?.message || 'Try again' });
+    }
+  };
+
+  const handleCancelSession = async (sessionId: string) => {
+    try {
+      await MentorshipAPI.cancelSession(sessionId);
+      toast({ title: 'Session Cancelled' });
+      const fresh = await MentorshipAPI.listMyRequests(user?.role === 'alumni' ? 'mentor' : 'student');
+      setMyRequests(Array.isArray(fresh.items) ? fresh.items : []);
+    } catch (e: any) {
+      toast({ title: 'Failed to cancel', description: e?.message || 'Try again' });
+    }
+  };
+
+  const handleOpenFeedbackDialog = (session: any) => {
+    setSelectedSession(session);
+    setFeedbackRating(5);
+    setFeedbackText('');
+    setFeedbackTemplate('');
+    setShowFeedbackDialog(true);
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!selectedSession) return;
+    try {
+      await MentorshipAPI.rateSession(selectedSession.id, {
+        rating: feedbackRating,
+        feedback: feedbackText || feedbackTemplate || undefined,
+      });
+      toast({ title: 'Feedback Submitted', description: 'Thank you for your feedback!' });
+      setShowFeedbackDialog(false);
+      setSelectedSession(null);
+      setFeedbackRating(5);
+      setFeedbackText('');
+      setFeedbackTemplate('');
+      const fresh = await MentorshipAPI.listMyRequests('student');
+      setMyRequests(Array.isArray(fresh.items) ? fresh.items : []);
+    } catch (e: any) {
+      toast({ title: 'Failed to submit', description: e?.message || 'Try again' });
+    }
   };
   const [selectedMentor, setSelectedMentor] = useState<any | null>(null);
   const [requestForm, setRequestForm] = useState({
@@ -564,7 +633,9 @@ export function MentorshipPage() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold">
-                          {user?.role === 'alumni' ? `From Student: ${r.studentId}` : `To Mentor: ${r.mentorId}`}
+                          {user?.role === 'alumni'
+                            ? `From Student: ${r.student?.name || r.studentId}`
+                            : `To Mentor: ${r.mentor?.name || r.mentorId}`}
                         </h3>
                         <Badge variant={r.status === 'Pending' ? 'secondary' : 'default'}>{r.status}</Badge>
                       </div>
@@ -580,15 +651,86 @@ export function MentorshipPage() {
                         </div>
                       </div>
                     </div>
-                    {user?.role === 'alumni' ? (
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={async () => { try { await MentorshipAPI.updateRequest(r.id, 'Accepted'); toast({ title: 'Accepted' }); setMyRequests((prev)=>prev.map(x=>x.id===r.id?{...x,status:'Accepted'}:x)); } catch (e:any) { toast({ title: 'Failed', description: e?.message||'Try again' }); } }}>Accept</Button>
-                        <Button size="sm" variant="outline" onClick={async () => { try { await MentorshipAPI.updateRequest(r.id, 'Declined'); toast({ title: 'Declined' }); setMyRequests((prev)=>prev.map(x=>x.id===r.id?{...x,status:'Declined'}:x)); } catch (e:any) { toast({ title: 'Failed', description: e?.message||'Try again' }); } }}>Decline</Button>
-                      </div>
-                    ) : (
-                      <Button size="sm" variant="outline" onClick={async () => { try { await MentorshipAPI.updateRequest(r.id, 'Cancelled'); toast({ title: 'Cancelled' }); setMyRequests((prev)=>prev.map(x=>x.id===r.id?{...x,status:'Cancelled'}:x)); } catch (e:any) { toast({ title: 'Failed', description: e?.message||'Try again' }); } }}>Cancel</Button>
-                    )}
+                    {r.status === 'Pending' ? (
+                      user?.role === 'alumni' ? (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenScheduleDialog(r)}
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                await MentorshipAPI.updateRequest(r.id, { status: 'Declined' });
+                                toast({ title: 'Declined' });
+                                setMyRequests((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: 'Declined' } : x)));
+                              } catch (e: any) {
+                                toast({ title: 'Failed', description: e?.message || 'Try again' });
+                              }
+                            }}
+                          >
+                            Decline
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              await MentorshipAPI.updateRequest(r.id, { status: 'Cancelled' });
+                              toast({ title: 'Cancelled' });
+                              setMyRequests((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: 'Cancelled' } : x)));
+                            } catch (e: any) {
+                              toast({ title: 'Failed', description: e?.message || 'Try again' });
+                            }
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      )
+                    ) : null}
                   </div>
+
+                  {r.session?.meetingLink && (
+                    <div className="mt-4 flex items-center justify-between rounded-lg border p-3 text-sm">
+                      <div>
+                        <div className="font-medium">Session scheduled</div>
+                        <div className="text-muted-foreground">
+                          {r.session?.scheduledAt ? new Date(r.session.scheduledAt).toLocaleString() : ''}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {r.session?.status === 'Scheduled' && (
+                          <>
+                            <Button size="sm" variant="default" asChild>
+                              <a href={r.session.meetingLink} target="_blank" rel="noreferrer">Join</a>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleCancelSession(r.session.id)}
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        )}
+                        {r.session?.status === 'Scheduled' && user?.role === 'student' && new Date(r.session.scheduledAt).getTime() <= Date.now() && (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => handleOpenFeedbackDialog(r.session)}
+                          >
+                            Mark as Done
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))
@@ -596,44 +738,74 @@ export function MentorshipPage() {
         </TabsContent>
 
         <TabsContent value="sessions" className="space-y-4">
-          {mockSessions.map((session) => (
-            <Card key={session.id}>
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <Avatar className="h-12 w-12">
-                    <AvatarImage src={session.avatar} alt={session.mentor} />
-                    <AvatarFallback>{session.mentor.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 space-y-2">
-                    <div>
-                      <h3 className="font-semibold">{session.mentor}</h3>
-                      <p className="text-sm text-muted-foreground">{session.topic}</p>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {session.date}
+          {myRequests.filter((r: any) => r.session?.meetingLink).length === 0 ? (
+            <div className="p-6 text-sm text-muted-foreground">No sessions scheduled yet.</div>
+          ) : (
+            myRequests
+              .filter((r: any) => r.session?.meetingLink)
+              .map((r: any) => {
+                const scheduledAtMs = r.session?.scheduledAt ? new Date(r.session.scheduledAt).getTime() : 0;
+                const canRate = user?.role === 'student' && scheduledAtMs > 0 && scheduledAtMs <= Date.now() && !r.session?.studentRating;
+                return (
+                  <Card key={r.id}>
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-2">
+                          <h3 className="font-semibold">Mentorship Session</h3>
+                          <p className="text-sm text-muted-foreground">Topic: {r.topic}</p>
+                          <div className="text-sm text-muted-foreground">
+                            Scheduled: {r.session?.scheduledAt ? new Date(r.session.scheduledAt).toLocaleString() : ''}
+                          </div>
+                          {typeof r.session?.studentRating === 'number' && (
+                            <div className="text-sm">Rated: {r.session.studentRating}/5</div>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button size="sm" asChild>
+                            <a href={r.session.meetingLink} target="_blank" rel="noreferrer">
+                              <Video className="h-4 w-4 mr-2" />
+                              Join
+                            </a>
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {session.time}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline">
-                      <MessageCircle className="h-4 w-4 mr-2" />
-                      Message
-                    </Button>
-                    <Button size="sm">
-                      <Video className="h-4 w-4 mr-2" />
-                      Join Meeting
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                      {canRate && (
+                        <div className="mt-4 flex items-center justify-between rounded-lg border p-3 text-sm">
+                          <div>
+                            <div className="font-medium">Rate this session</div>
+                            <div className="text-muted-foreground">Your feedback helps improve mentor quality.</div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                const raw = window.prompt('Rate this session 1-5', '5');
+                                const rating = raw ? Number(raw) : NaN;
+                                if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+                                  toast({ title: 'Invalid rating', description: 'Enter a number between 1 and 5' });
+                                  return;
+                                }
+                                await MentorshipAPI.rateSession(String(r.session.id), { rating: Math.round(rating) });
+                                toast({ title: 'Thanks for rating!' });
+                                const fresh = await MentorshipAPI.listMyRequests('student');
+                                setMyRequests(Array.isArray(fresh.items) ? fresh.items : []);
+                              } catch (e: any) {
+                                toast({ title: 'Failed', description: e?.message || 'Try again' });
+                              }
+                            }}
+                          >
+                            Rate
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })
+          )}
         </TabsContent>
       </Tabs>
 
@@ -818,6 +990,115 @@ export function MentorshipPage() {
                 {submitting ? 'Sending…' : 'Send Request'}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule Session Dialog */}
+      <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Schedule Mentorship Session</DialogTitle>
+            <DialogDescription>
+              Choose a time for the mentorship session. You can accept the preferred time or suggest a different time.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="scheduleDateTime">Session Date & Time</Label>
+              <Input
+                id="scheduleDateTime"
+                type="datetime-local"
+                value={scheduledDateTime}
+                onChange={(e) => setScheduledDateTime(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Preferred time: {selectedRequest?.preferredDateTime ? new Date(selectedRequest.preferredDateTime).toLocaleString() : 'Not specified'}
+            </div>
+          </div>
+          <div className="flex gap-3 pt-4">
+            <Button variant="outline" onClick={() => setShowScheduleDialog(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button onClick={handleScheduleSession} className="flex-1">
+              Schedule Session
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Feedback Dialog */}
+      <Dialog open={showFeedbackDialog} onOpenChange={setShowFeedbackDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rate Your Mentorship Session</DialogTitle>
+            <DialogDescription>
+              How was your mentorship session? Please provide feedback to help improve the mentorship program.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Star Rating */}
+            <div className="space-y-2">
+              <Label>Rating</Label>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setFeedbackRating(star)}
+                    className="text-3xl transition-transform hover:scale-110"
+                  >
+                    {star <= feedbackRating ? '⭐' : '☆'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Feedback Templates */}
+            <div className="space-y-2">
+              <Label>Quick Feedback (Optional)</Label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  'Very helpful and knowledgeable',
+                  'Clear and easy to understand',
+                  'Practical advice given',
+                  'Could improve communication',
+                  'Session was too short',
+                  'Would recommend to others',
+                ].map((template) => (
+                  <Button
+                    key={template}
+                    size="sm"
+                    variant={feedbackTemplate === template ? 'default' : 'outline'}
+                    onClick={() => setFeedbackTemplate(feedbackTemplate === template ? '' : template)}
+                    className="text-xs"
+                  >
+                    {template}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Feedback */}
+            <div className="space-y-2">
+              <Label htmlFor="feedback">Additional Comments (Optional)</Label>
+              <Textarea
+                id="feedback"
+                placeholder="Share your experience..."
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-4">
+            <Button variant="outline" onClick={() => setShowFeedbackDialog(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitFeedback} className="flex-1">
+              Submit Feedback
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
