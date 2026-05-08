@@ -66,6 +66,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
   const [hasLiked, setHasLiked] = useState<boolean>(false);
   const [showProfilePrompt, setShowProfilePrompt] = useState(false);
   const [showAllMissions, setShowAllMissions] = useState(false);
+  const [showAllMissionsPersisted, setShowAllMissionsPersisted] = useState(false);
   // Rising-edge trackers
   const prevConnectRef = useRef<number>(0);
   const prevApplyRef = useRef<number>(0);
@@ -359,6 +360,30 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
     });
     return () => unsub();
   }, [user?.id]);
+
+  // Persist showAllMissions state to localStorage
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const saved = localStorage.getItem(`showAllMissions_${user.id}`);
+      if (saved !== null) {
+        setShowAllMissionsPersisted(saved === 'true');
+        setShowAllMissions(saved === 'true');
+      }
+    } catch {}
+  }, [user?.id]);
+
+  const handleToggleMissions = () => {
+    const newState = !showAllMissions;
+    setShowAllMissions(newState);
+    setShowAllMissionsPersisted(newState);
+    if (user?.id) {
+      try {
+        localStorage.setItem(`showAllMissions_${user.id}`, String(newState));
+      } catch {}
+    }
+  };
+
   const featuredMentors: Array<{ id: string; name: string; role: string; avatar?: string; online?: boolean }> = [
     { id: 'm1', name: 'Maria Khan', role: 'PM, Microsoft', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&h=80&fit=crop&crop=face', online: true },
     { id: 'm2', name: 'Ali Raza', role: 'SWE, Google', avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=80&h=80&fit=crop&crop=face', online: false },
@@ -697,7 +722,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
                 Total Points: <span className="text-foreground font-semibold text-base md:text-lg">{points}</span>
               </div>
             </div>
-            <div className={`space-y-3 flex-1 min-h-0 overflow-auto pr-1`}>
+            <div className={`space-y-3 flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 max-h-[280px]`}>
               {(showAllMissions ? missions : missions.slice(0,3)).map((m, idx) => (
                 <div key={m.id} className="p-3 rounded-xl border flex items-center justify-between gap-3 hover:bg-accent/50 transition-colors">
                   <div className="text-sm font-medium truncate flex items-center gap-2">
@@ -731,7 +756,12 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
               ))}
               {!showAllMissions && missions.length > 3 && (
                 <div className="flex justify-center">
-                  <Button size="sm" variant="outline" onClick={() => setShowAllMissions(true)}>Load more</Button>
+                  <Button size="sm" variant="outline" onClick={handleToggleMissions}>Load more</Button>
+                </div>
+              )}
+              {showAllMissions && missions.length > 3 && (
+                <div className="flex justify-center mt-2">
+                  <Button size="sm" variant="outline" onClick={handleToggleMissions}>Show less</Button>
                 </div>
               )}
             </div>
@@ -1035,7 +1065,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Events */}
-        <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong">
+        <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-strong border border-[#0D47A1]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
