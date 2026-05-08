@@ -17,6 +17,7 @@ import Profile from "@/pages/Profile";
 import { MessagesPage } from "@/components/messages/MessagesPage";
 import OnboardingFlow from "@/components/onboarding/OnboardingFlow";
 import { VideoMeeting } from "@/components/mentorship/VideoMeeting";
+import { Chatbot } from "@/components/chatbot/Chatbot";
 
 // Create a wrapper component for protected routes
 const AuthWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -30,7 +31,12 @@ const AuthWrapper = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <Chatbot />
+    </>
+  );
 };
 
 const queryClient = new QueryClient();

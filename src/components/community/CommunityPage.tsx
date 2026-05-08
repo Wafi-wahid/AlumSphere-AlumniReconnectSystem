@@ -34,14 +34,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/store/auth";
-import { authReady, db } from "@/lib/firebase";
+import { authReady, db, storage } from "@/lib/firebase";
 import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, setDoc, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ContentModerator } from "@/lib/contentModeration";
+import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from "firebase/storage";
 
 type Post = {
   id: string;
@@ -74,29 +75,44 @@ export function CommunityPage() {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [guidelinesOpen, setGuidelinesOpen] = useState(false);
   const [guidelinesAccepted, setGuidelinesAccepted] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [postToDelete, setPostToDelete] = useState<Post | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [posting, setPosting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const { toast } = useToast();
   const contentModerator = ContentModerator.getInstance();
 
-  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined;
-  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string | undefined;
-  const cloudFolder = import.meta.env.VITE_CLOUDINARY_FOLDER as string | undefined;
-
-  async function uploadToCloudinary(file: File, type: "image" | "video") {
-    if (!cloudName || !uploadPreset) throw new Error("Cloudinary is not configured");
-    const resource = type === "video" ? "video" : "image";
-    const url = `https://api.cloudinary.com/v1_1/${cloudName}/${resource}/upload`;
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("upload_preset", uploadPreset);
-    if (cloudFolder) {
-      fd.append("folder", cloudFolder);
+  async function uploadToFirebaseStorage(file: File, type: "image" | "video" = "image"): Promise<string> {
+    // File size limits (50MB for video, 10MB for images)
+    const maxSize = type === "video" ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      throw new Error(`${type === "video" ? "Video" : "Image"} too large. Max size: ${type === "video" ? "50MB" : "10MB"}`);
     }
-    const res = await fetch(url, { method: "POST", body: fd });
-    if (!res.ok) throw new Error("Upload failed");
-    const data = await res.json();
-    return data.secure_url as string;
+
+    const fileName = `${Date.now()}_${file.name}`;
+    const storageRef = ref(storage, `community_posts/${type}/${fileName}`);
+    
+    // Upload with progress tracking
+    const uploadTask = uploadBytesResumable(storageRef, file);
+    
+    return new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(Math.round(progress));
+        },
+        (error) => {
+          reject(error);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve(downloadURL);
+        }
+      );
+    });
   }
 
   // Subscribe to single dummy post; create if missing (not as current user)
@@ -134,9 +150,10 @@ export function CommunityPage() {
 
   }, []);
 
-  // Check if user has accepted community guidelines
+  // Check if user has accepted community guidelines (only for alumni and students)
   useEffect(() => {
     if (!user?.id) return;
+    if (user.role !== 'alumni' && user.role !== 'student') return;
     
     const checkGuidelinesAccepted = async () => {
       try {
@@ -154,7 +171,7 @@ export function CommunityPage() {
     };
     
     checkGuidelinesAccepted();
-  }, [user?.id]);
+  }, [user?.id, user?.role]);
 
   // Connections subscriptions for duplicate guard in community
   useEffect(() => {
@@ -251,10 +268,11 @@ export function CommunityPage() {
     }
     
     setPosting(true);
+    setUploadProgress(0);
     let mediaUrl: string | undefined;
     try {
       if (uploadFile && uploadType && uploadType !== "article") {
-        mediaUrl = await uploadToCloudinary(uploadFile, uploadType);
+        mediaUrl = await uploadToFirebaseStorage(uploadFile, uploadType);
       }
       if (uploadType === "article" && articleUrl) {
         mediaUrl = articleUrl;
@@ -278,11 +296,13 @@ export function CommunityPage() {
       setUploadFile(null);
       setUploadType(undefined);
       setArticleUrl("");
+      setUploadProgress(0);
     } catch (e: any) {
       console.error(e);
       toast({ title: "Failed to post", description: e?.message || "Please try again.", variant: "destructive" as any });
     } finally {
       setPosting(false);
+      setUploadProgress(0);
     }
   };
 
@@ -351,11 +371,31 @@ export function CommunityPage() {
 
   const handleAdminDelete = async (post: Post) => {
     if (!user || (user.role !== "admin" && user.role !== "super_admin")) return;
-    const reason = prompt("Reason for deletion (required):");
-    if (!reason) return;
-    // In a full solution, we'd write moderation record. For now, just delete the post.
-    await deleteDoc(doc(db, "posts", post.id));
-    alert(`Post deleted. Reason: ${reason}`);
+    setPostToDelete(post);
+    setDeleteReason("");
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeletePost = async () => {
+    if (!postToDelete || !deleteReason.trim()) return;
+    
+    try {
+      // In a full solution, we'd write moderation record. For now, just delete the post.
+      await deleteDoc(doc(db, "posts", postToDelete.id));
+      toast({ 
+        title: "Post Deleted", 
+        description: `Reason: ${deleteReason}` 
+      });
+      setDeleteDialogOpen(false);
+      setPostToDelete(null);
+      setDeleteReason("");
+    } catch (error) {
+      toast({ 
+        title: "Error", 
+        description: "Failed to delete post", 
+        variant: "destructive" 
+      });
+    }
   };
 
   return (
@@ -379,9 +419,11 @@ export function CommunityPage() {
               <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto">
                 Browse Posts
               </Button>
-              <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => setGuidelinesOpen(true)}>
-                Read Guidelines
-              </Button>
+              {(user?.role === 'alumni' || user?.role === 'student') && (
+                <Button variant="outline" className="h-10 px-5 rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/60 w-full sm:w-auto" onClick={() => setGuidelinesOpen(true)}>
+                  Read Guidelines
+                </Button>
+              )}
             </div>
           </div>
 
@@ -445,7 +487,7 @@ export function CommunityPage() {
             </div>
             <Button size="sm" onClick={handleCreatePost} disabled={!user || posting}>
               <Send className="h-4 w-4 mr-2" />
-              {posting ? "Posting..." : "Post"}
+              {posting ? (uploadProgress > 0 ? `Uploading ${uploadProgress}%` : "Posting...") : "Post"}
             </Button>
           </div>
         </CardContent>
@@ -456,6 +498,9 @@ export function CommunityPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add article link</DialogTitle>
+            <DialogDescription>
+              Enter the URL of the article you want to share with the community.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Input
@@ -489,6 +534,9 @@ export function CommunityPage() {
               <BookOpen className="h-5 w-5" />
               Community Guidelines
             </DialogTitle>
+            <DialogDescription>
+              Please review our community guidelines before posting.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -586,6 +634,62 @@ export function CommunityPage() {
               disabled={!guidelinesAccepted}
             >
               Accept & Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Delete Post
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this post? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-red-800 text-sm">
+                Are you sure you want to delete this post by <strong>{postToDelete?.authorName}</strong>?
+              </p>
+              {postToDelete?.content && (
+                <p className="text-red-700 text-xs mt-2 italic truncate">
+                  "{postToDelete.content}"
+                </p>
+              )}
+            </div>
+            
+            <div className="space-y-2">
+              <label htmlFor="delete-reason" className="text-sm font-medium">
+                Reason for deletion <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                id="delete-reason"
+                placeholder="Please provide a reason for deleting this post..."
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                className="min-h-[80px] resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => {
+              setDeleteDialogOpen(false);
+              setPostToDelete(null);
+              setDeleteReason("");
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={confirmDeletePost}
+              disabled={!deleteReason.trim()}
+            >
+              Delete Post
             </Button>
           </DialogFooter>
         </DialogContent>

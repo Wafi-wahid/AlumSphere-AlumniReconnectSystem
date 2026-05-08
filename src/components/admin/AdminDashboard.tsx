@@ -19,35 +19,108 @@ function randomFrom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+const seedProfilesData = [
+  {
+    url: "https://www.linkedin.com/in/manahil-habib/",
+    name: "Manahil Habib",
+    headline: "Software Engineer",
+    location: "Islāmābād, Pakistan",
+    company: "Eris Innovations",
+    education: null
+  },
+  {
+    url: "https://www.linkedin.com/in/ayla-amir-b36958297/",
+    name: "Ayla Amir",
+    headline: "Software Engineering Student | Project Management Experience | Exchange Program Participant",
+    location: "Rawalpindi, Punjab, Pakistan",
+    company: "Riphah International University",
+    education: null
+  },
+  {
+    url: "https://www.linkedin.com/in/malaika-shahzad/",
+    name: "Malaika Shahzad",
+    headline: "Software Engineer | Ex-Intern @NADRA | Software Quality Assurance",
+    location: "Rawalpindi, Punjab, Pakistan",
+    company: null,
+    education: null
+  },
+  {
+    url: "https://www.linkedin.com/in/soha-ali-207b30287/",
+    name: "Soha Ali",
+    headline: "Front End Developer | Skilled in HTML, CSS, JavaScript, PHP, C++, Java & MySQL | Eager to Build Scalable Digital Solutions",
+    location: "Islāmābād, Pakistan",
+    company: "Riphah International University",
+    education: null
+  },
+  {
+    url: "https://www.linkedin.com/in/maryam-safdar-069b53301/",
+    name: "Maryam Safdar",
+    headline: "Software Engineering Student | Web & Mobile App Developer | UI/UX Designer",
+    location: "Rawalpindi, Punjab, Pakistan",
+    company: "Riphah International University",
+    education: null
+  },
+  {
+    url: "https://www.linkedin.com/in/himal-khan-35406023b",
+    name: "Himal Khan",
+    headline: "Human Resources Associate at we.R.play",
+    location: "Islamabad, Islāmābād, Pakistan",
+    company: "weRplay",
+    education: null
+  },
+  {
+    url: "https://www.linkedin.com/in/shehla-awan-463145bb",
+    name: "Shehla Awan",
+    headline: "Speech and Language Pathologist",
+    location: "Special Education School Islamabad",
+    company: "Riphah International University",
+    education: null
+  },
+  {
+    url: "https://www.linkedin.com/in/rawiah-ayoub-995506198",
+    name: "Rawiah Ayoub",
+    headline: "Graduated",
+    location: "Islāmābād, Pakistan",
+    company: "Villa Vista",
+    education: null
+  },
+  {
+    url: "https://www.linkedin.com/in/qasim-burhan-618b7368",
+    name: "qasim burhan",
+    headline: "service at Government Affairs",
+    location: "Saint Paul Cambridge Rawalpindi",
+    company: "Government Affairs",
+    education: null
+  },
+  {
+    url: "https://www.linkedin.com/in/muhammad-husnain-26791a256",
+    name: "Muhammad (Aulakh) Husnain",
+    headline: "Network Administrator (CCNA)",
+    location: "Faisalabad, Punjab, Pakistan",
+    company: "WAPDA",
+    education: null
+  }
+];
+
 function makeProfile(i: number) {
-  const firstNames = ["Aisha","Ahmed","Fatima","Ali","Sara","Bilal","Hassan","Hira","Zain","Noor"]; 
-  const lastNames = ["Khan","Malik","Ahmed","Raza","Hussain","Ali","Sheikh","Qureshi","Javed","Saeed"]; 
-  const companies = ["Google","Microsoft","Amazon","Meta","Apple","NayaPay","Careem","Systems Limited","10Pearls","Bykea"]; 
-  const roles = ["Software Engineer","Product Manager","Data Scientist","UX Designer","Mobile Developer","DevOps Engineer"]; 
-  const departments = ["Computer Science","Electrical Engineering","Business","Design","Data Science"]; 
-  const locations = ["Karachi, PK","Lahore, PK","Islamabad, PK","Dubai, AE","Riyadh, SA","London, UK","Toronto, CA"]; 
-  const skillsPool = ["React","TypeScript","Node.js","Python","SQL","AWS","Figma","Kubernetes","Django","Swift","Flutter"]; 
-
-  const name = `${randomFrom(firstNames)} ${randomFrom(lastNames)}`;
-  const skills = Array.from({ length: 3 + Math.floor(Math.random() * 4) }, () => randomFrom(skillsPool));
-  const uniqueSkills = Array.from(new Set(skills));
-
+  const profile = seedProfilesData[i % seedProfilesData.length];
+  
   return {
-    name,
-    avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}&radius=8`,
-    company: randomFrom(companies),
-    role: randomFrom(roles),
-    graduationYear: 2015 + Math.floor(Math.random() * 11),
-    department: randomFrom(departments),
-    location: randomFrom(locations),
-    skills: uniqueSkills,
+    name: profile.name,
+    avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.name)}&radius=8`,
+    company: profile.company || "",
+    role: profile.headline || "",
+    graduationYear: 2020 + Math.floor(Math.random() * 5),
+    department: "Software Engineering",
+    location: profile.location || "",
+    skills: ["React", "TypeScript", "Node.js", "JavaScript", "Python"],
     mentorAvailable: Math.random() < 0.4,
-    linkedinSynced: Math.random() < 0.7,
+    linkedinSynced: true,
     rating: Number((4 + Math.random()).toFixed(1)),
     mentoringSessions: Math.floor(Math.random() * 30),
     isCurrentStudent: false,
     roleCategory: 'alumni',
-    sourceUrl: "seed://admin",
+    sourceUrl: profile.url,
     crawledAt: serverTimestamp(),
     confidence: 0.9,
   };
