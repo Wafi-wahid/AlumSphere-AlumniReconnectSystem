@@ -1,4 +1,4 @@
-import { Bell, MessageSquare, User, Menu, GraduationCap, X, Award } from "lucide-react";
+import { Bell, MessageSquare, User, Menu, GraduationCap, X, Award, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -38,6 +38,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
   const [notifications, setNotifications] = useState<Array<{ id: string; title: string; body?: string; convId?: string; type?: string; jobId?: string; link?: string; createdAt: number }>>([]);
   const [incomingCall, setIncomingCall] = useState<null | { convId: string; type: 'audio' | 'video'; fromName: string; toName?: string }>(null);
   const [incomingRequests, setIncomingRequests] = useState<Array<{ id: string; senderMongoId?: string; name?: string; avatar?: string; createdAt?: any }>>([]);
+  const [acceptedConnections, setAcceptedConnections] = useState<Array<{ id: string; name: string; avatar?: string; connectedAt?: any }>>([]);
   const ringCtxRef = useRef<AudioContext | null>(null);
   const ringOscRef = useRef<OscillatorNode | null>(null);
   const ringGainRef = useRef<GainNode | null>(null);
@@ -183,6 +184,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     });
     const unsubAcc = onSnapshot(collection(db, 'connections', user.id, 'accepted'), (snap) => {
       const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setAcceptedConnections(items);
       items.forEach((it: any) => {
         const ts = it.connectedAt?.toMillis ? it.connectedAt.toMillis() : (it.createdAt?.toMillis ? it.createdAt.toMillis() : 0);
         const prev = connLastRef.current.acc || 0;
@@ -497,24 +499,6 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                       {Math.min(notifications.length, 9)}
                     </Badge>
                   )}
-                  {pendingReqCount > 0 && (
-                    <Badge
-                      variant="secondary"
-                      className="absolute -bottom-1 -right-1 h-4 min-w-4 rounded-full p-0 flex items-center justify-center text-[10px]"
-                      title={`${pendingReqCount} connection request${pendingReqCount>1?'s':''}`}
-                    >
-                      {Math.min(pendingReqCount, 9)}
-                    </Badge>
-                  )}
-                  {pendingReqCount > 0 && (
-                    <Badge
-                      variant="secondary"
-                      className="absolute -bottom-1 -right-1 h-4 min-w-4 rounded-full p-0 flex items-center justify-center text-[10px]"
-                      title={`${pendingReqCount} connection request${pendingReqCount>1?'s':''}`}
-                    >
-                      {Math.min(pendingReqCount, 9)}
-                    </Badge>
-                  )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
@@ -522,28 +506,6 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                   <div className="p-3 text-sm text-muted-foreground">No new notifications</div>
                 ) : (
                   <div className="max-h-80 overflow-auto">
-                    {incomingRequests.length > 0 && (
-                      <div className="p-2 border-b">
-                        <div className="text-xs font-medium text-muted-foreground mb-1">Incoming Requests</div>
-                        <div className="space-y-2">
-                          {incomingRequests.map((r) => (
-                            <div key={`req_${r.id}`} className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Avatar className="h-6 w-6">
-                                  <AvatarImage src={r.avatar} alt={r.name} />
-                                  <AvatarFallback>{String(r.name || 'U').slice(0,2).toUpperCase()}</AvatarFallback>
-                                </Avatar>
-                                <div className="truncate text-sm">{r.name || 'Someone'}</div>
-                              </div>
-                              <div className="flex gap-1 shrink-0">
-                                <Button size="sm" variant="default" onClick={(e) => { e.stopPropagation(); acceptRequest(r); }}>Accept</Button>
-                                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); declineRequest(r); }}>Decline</Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                     {notifications.map((n) => (
                       <DropdownMenuItem key={n.id} className="flex items-start gap-2">
                         <div className="flex-1 min-w-0" onClick={() => openNotification(n)}>
@@ -610,6 +572,88 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate({ pathname: "/", search: "?tab=messages" })}>
                   Go to Messages
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Connections */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative">
+                  <Users className="h-5 w-5" />
+                  {(acceptedConnections.length > 0 || pendingReqCount > 0) && (
+                    <Badge 
+                      variant="secondary" 
+                      className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs"
+                    >
+                      {Math.min(acceptedConnections.length + pendingReqCount, 9)}
+                    </Badge>
+                  )}
+                  {pendingReqCount > 0 && (
+                    <Badge
+                      variant="destructive"
+                      className="absolute -bottom-1 -right-1 h-4 min-w-4 rounded-full p-0 flex items-center justify-center text-[10px]"
+                      title={`${pendingReqCount} pending request${pendingReqCount>1?'s':''}`}
+                    >
+                      {Math.min(pendingReqCount, 9)}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                {incomingRequests.length > 0 && (
+                  <>
+                    <div className="p-2 border-b">
+                      <div className="text-xs font-medium text-muted-foreground mb-1">Pending Requests</div>
+                      <div className="space-y-2">
+                        {incomingRequests.slice(0, 3).map((r) => (
+                          <div key={`req_${r.id}`} className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Avatar className="h-6 w-6">
+                                <AvatarImage src={r.avatar} alt={r.name} />
+                                <AvatarFallback>{String(r.name || 'U').slice(0,2).toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                              <div className="truncate text-sm">{r.name || 'Someone'}</div>
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                              <Button size="sm" variant="default" onClick={(e) => { e.stopPropagation(); acceptRequest(r); }}>Accept</Button>
+                              <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); declineRequest(r); }}>Decline</Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                {acceptedConnections.length === 0 && incomingRequests.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground">No connections yet</div>
+                ) : (
+                  <>
+                    {acceptedConnections.length > 0 && (
+                      <>
+                        <div className="p-2">
+                          <div className="text-xs font-medium text-muted-foreground mb-1">Your Connections</div>
+                        </div>
+                        {acceptedConnections.slice(0, 4).map((c) => (
+                          <DropdownMenuItem key={c.id} className="flex items-start gap-2" onClick={() => navigate({ pathname: "/profile", search: `?id=${c.id}` })}>
+                            <Avatar className="h-8 w-8 shrink-0">
+                              <AvatarImage src={c.avatar} alt={c.name} />
+                              <AvatarFallback>{String(c.name || 'U').slice(0,2).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{c.name || 'User'}</div>
+                              <div className="text-xs text-muted-foreground">Connected</div>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </>
+                    )}
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate({ pathname: "/", search: "?tab=directory&connections=true" })}>
+                  View all connections
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
