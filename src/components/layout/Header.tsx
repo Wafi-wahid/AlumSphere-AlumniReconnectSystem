@@ -163,6 +163,116 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     return () => unsub();
   }, [user?.id]);
 
+  // New events notifications
+  const eventLastRef = useRef<number>(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'events'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const events = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const latestEvent = events[0];
+      if (latestEvent) {
+        const ts = latestEvent.createdAt?.toMillis ? latestEvent.createdAt.toMillis() : 0;
+        const prev = eventLastRef.current || 0;
+        if (ts > prev && ts !== 0) {
+          setNotifications((prevList) => [{ id: `event_${latestEvent.id}_${ts}`, title: `New event: ${latestEvent.title || 'Event added'}`, body: latestEvent.description || undefined, type: 'event', link: `/events`, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > eventLastRef.current) eventLastRef.current = ts;
+      }
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // New job postings notifications
+  const jobLastRef = useRef<number>(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const jobs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const latestJob = jobs[0];
+      if (latestJob) {
+        const ts = latestJob.createdAt?.toMillis ? latestJob.createdAt.toMillis() : 0;
+        const prev = jobLastRef.current || 0;
+        if (ts > prev && ts !== 0) {
+          setNotifications((prevList) => [{ id: `job_${latestJob.id}_${ts}`, title: `New job: ${latestJob.title || 'Job posted'}`, body: `${latestJob.company || ''} • ${latestJob.location || ''}`, type: 'job', jobId: latestJob.id, link: `/careers`, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > jobLastRef.current) jobLastRef.current = ts;
+      }
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // New community posts notifications
+  const postLastRef = useRef<number>(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const posts = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const latestPost = posts[0];
+      if (latestPost) {
+        const ts = latestPost.createdAt?.toMillis ? latestPost.createdAt.toMillis() : 0;
+        const prev = postLastRef.current || 0;
+        if (ts > prev && ts !== 0) {
+          const authorName = latestPost.authorName || 'Someone';
+          setNotifications((prevList) => [{ id: `post_${latestPost.id}_${ts}`, title: `New post by ${authorName}`, body: latestPost.content?.substring(0, 100) || undefined, type: 'post', link: `/community`, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > postLastRef.current) postLastRef.current = ts;
+      }
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // New alumni notifications
+  const alumniLastRef = useRef<number>(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'users'), where('role', '==', 'alumni'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const alumni = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const latestAlumni = alumni[0];
+      if (latestAlumni) {
+        const ts = latestAlumni.createdAt?.toMillis ? latestAlumni.createdAt.toMillis() : 0;
+        const prev = alumniLastRef.current || 0;
+        if (ts > prev && ts !== 0) {
+          setNotifications((prevList) => [{ id: `alumni_${latestAlumni.id}_${ts}`, title: `New alumni joined: ${latestAlumni.name || 'New member'}`, body: `${latestAlumni.position || ''} at ${latestAlumni.currentCompany || ''}`, type: 'alumni', link: `/directory`, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > alumniLastRef.current) alumniLastRef.current = ts;
+      }
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // Mentor availability notifications
+  const mentorLastRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'users'), where('role', '==', 'alumni'));
+    const unsub = onSnapshot(q, (snap) => {
+      snap.docChanges().forEach((change) => {
+        if (change.type === 'modified') {
+          const data = change.doc.data() as any;
+          const id = change.doc.id;
+          const isMentorAvailable = data.mentorEligible || data.mentorshipEligible;
+          const prev = mentorLastRef.current[id] || 0;
+          const ts = data.updatedAt?.toMillis ? data.updatedAt.toMillis() : 0;
+          
+          if (isMentorAvailable && ts > prev && ts !== 0) {
+            setNotifications((prevList) => [{ id: `mentor_${id}_${ts}`, title: `${data.name || 'Mentor'} is now available for mentorship`, body: data.position || undefined, type: 'mentor', link: `/mentorship`, createdAt: Date.now() }, ...prevList].slice(0, 20));
+          }
+          if (ts > prev) mentorLastRef.current[id] = ts;
+        }
+      });
+    });
+    return () => unsub();
+  }, [user?.id]);
+
   // Connection notifications: new requests and accepted
   const connLastRef = useRef<{ req: number; acc: number }>({ req: 0, acc: 0 });
   const [pendingReqCount, setPendingReqCount] = useState(0);
@@ -309,9 +419,25 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
   };
 
   const openNotification = (n: { convId?: string; type?: string; jobId?: string; link?: string }) => {
-    if (n.type === 'job_referral') {
+    if (n.type === 'job_referral' || n.type === 'job') {
       const params = new URLSearchParams({ tab: 'careers', ...(n.jobId ? { job: String(n.jobId) } : {}) });
       navigate({ pathname: '/', search: `?${params.toString()}` });
+      return;
+    }
+    if (n.type === 'event') {
+      navigate({ pathname: '/', search: '?tab=events' });
+      return;
+    }
+    if (n.type === 'post') {
+      navigate({ pathname: '/', search: '?tab=community' });
+      return;
+    }
+    if (n.type === 'alumni') {
+      navigate({ pathname: '/', search: '?tab=directory' });
+      return;
+    }
+    if (n.type === 'mentor') {
+      navigate({ pathname: '/', search: '?tab=mentorship' });
       return;
     }
     if (n.convId) {
