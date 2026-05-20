@@ -1,4 +1,4 @@
-import { Bell, MessageSquare, User, Menu, GraduationCap, X, Award } from "lucide-react";
+import { Bell, MessageSquare, User, Menu, GraduationCap, X, Award, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -38,6 +38,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
   const [notifications, setNotifications] = useState<Array<{ id: string; title: string; body?: string; convId?: string; type?: string; jobId?: string; link?: string; createdAt: number }>>([]);
   const [incomingCall, setIncomingCall] = useState<null | { convId: string; type: 'audio' | 'video'; fromName: string; toName?: string }>(null);
   const [incomingRequests, setIncomingRequests] = useState<Array<{ id: string; senderMongoId?: string; name?: string; avatar?: string; createdAt?: any }>>([]);
+  const [acceptedConnections, setAcceptedConnections] = useState<Array<{ id: string; name: string; avatar?: string; connectedAt?: any }>>([]);
   const ringCtxRef = useRef<AudioContext | null>(null);
   const ringOscRef = useRef<OscillatorNode | null>(null);
   const ringGainRef = useRef<GainNode | null>(null);
@@ -162,6 +163,116 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     return () => unsub();
   }, [user?.id]);
 
+  // New events notifications
+  const eventLastRef = useRef<number>(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'events'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const events = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const latestEvent = events[0];
+      if (latestEvent) {
+        const ts = latestEvent.createdAt?.toMillis ? latestEvent.createdAt.toMillis() : 0;
+        const prev = eventLastRef.current || 0;
+        if (ts > prev && ts !== 0) {
+          setNotifications((prevList) => [{ id: `event_${latestEvent.id}_${ts}`, title: `New event: ${latestEvent.title || 'Event added'}`, body: latestEvent.description || undefined, type: 'event', link: `/events`, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > eventLastRef.current) eventLastRef.current = ts;
+      }
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // New job postings notifications
+  const jobLastRef = useRef<number>(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const jobs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const latestJob = jobs[0];
+      if (latestJob) {
+        const ts = latestJob.createdAt?.toMillis ? latestJob.createdAt.toMillis() : 0;
+        const prev = jobLastRef.current || 0;
+        if (ts > prev && ts !== 0) {
+          setNotifications((prevList) => [{ id: `job_${latestJob.id}_${ts}`, title: `New job: ${latestJob.title || 'Job posted'}`, body: `${latestJob.company || ''} • ${latestJob.location || ''}`, type: 'job', jobId: latestJob.id, link: `/careers`, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > jobLastRef.current) jobLastRef.current = ts;
+      }
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // New community posts notifications
+  const postLastRef = useRef<number>(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const posts = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const latestPost = posts[0];
+      if (latestPost) {
+        const ts = latestPost.createdAt?.toMillis ? latestPost.createdAt.toMillis() : 0;
+        const prev = postLastRef.current || 0;
+        if (ts > prev && ts !== 0) {
+          const authorName = latestPost.authorName || 'Someone';
+          setNotifications((prevList) => [{ id: `post_${latestPost.id}_${ts}`, title: `New post by ${authorName}`, body: latestPost.content?.substring(0, 100) || undefined, type: 'post', link: `/community`, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > postLastRef.current) postLastRef.current = ts;
+      }
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // New alumni notifications
+  const alumniLastRef = useRef<number>(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'users'), where('role', '==', 'alumni'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const alumni = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const latestAlumni = alumni[0];
+      if (latestAlumni) {
+        const ts = latestAlumni.createdAt?.toMillis ? latestAlumni.createdAt.toMillis() : 0;
+        const prev = alumniLastRef.current || 0;
+        if (ts > prev && ts !== 0) {
+          setNotifications((prevList) => [{ id: `alumni_${latestAlumni.id}_${ts}`, title: `New alumni joined: ${latestAlumni.name || 'New member'}`, body: `${latestAlumni.position || ''} at ${latestAlumni.currentCompany || ''}`, type: 'alumni', link: `/directory`, createdAt: Date.now() }, ...prevList].slice(0, 20));
+        }
+        if (ts > alumniLastRef.current) alumniLastRef.current = ts;
+      }
+    });
+    return () => unsub();
+  }, [user?.id]);
+
+  // Mentor availability notifications
+  const mentorLastRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    const q = query(collection(db, 'users'), where('role', '==', 'alumni'));
+    const unsub = onSnapshot(q, (snap) => {
+      snap.docChanges().forEach((change) => {
+        if (change.type === 'modified') {
+          const data = change.doc.data() as any;
+          const id = change.doc.id;
+          const isMentorAvailable = data.mentorEligible || data.mentorshipEligible;
+          const prev = mentorLastRef.current[id] || 0;
+          const ts = data.updatedAt?.toMillis ? data.updatedAt.toMillis() : 0;
+          
+          if (isMentorAvailable && ts > prev && ts !== 0) {
+            setNotifications((prevList) => [{ id: `mentor_${id}_${ts}`, title: `${data.name || 'Mentor'} is now available for mentorship`, body: data.position || undefined, type: 'mentor', link: `/mentorship`, createdAt: Date.now() }, ...prevList].slice(0, 20));
+          }
+          if (ts > prev) mentorLastRef.current[id] = ts;
+        }
+      });
+    });
+    return () => unsub();
+  }, [user?.id]);
+
   // Connection notifications: new requests and accepted
   const connLastRef = useRef<{ req: number; acc: number }>({ req: 0, acc: 0 });
   const [pendingReqCount, setPendingReqCount] = useState(0);
@@ -183,6 +294,7 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
     });
     const unsubAcc = onSnapshot(collection(db, 'connections', user.id, 'accepted'), (snap) => {
       const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setAcceptedConnections(items);
       items.forEach((it: any) => {
         const ts = it.connectedAt?.toMillis ? it.connectedAt.toMillis() : (it.createdAt?.toMillis ? it.createdAt.toMillis() : 0);
         const prev = connLastRef.current.acc || 0;
@@ -307,9 +419,25 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
   };
 
   const openNotification = (n: { convId?: string; type?: string; jobId?: string; link?: string }) => {
-    if (n.type === 'job_referral') {
+    if (n.type === 'job_referral' || n.type === 'job') {
       const params = new URLSearchParams({ tab: 'careers', ...(n.jobId ? { job: String(n.jobId) } : {}) });
       navigate({ pathname: '/', search: `?${params.toString()}` });
+      return;
+    }
+    if (n.type === 'event') {
+      navigate({ pathname: '/', search: '?tab=events' });
+      return;
+    }
+    if (n.type === 'post') {
+      navigate({ pathname: '/', search: '?tab=community' });
+      return;
+    }
+    if (n.type === 'alumni') {
+      navigate({ pathname: '/', search: '?tab=directory' });
+      return;
+    }
+    if (n.type === 'mentor') {
+      navigate({ pathname: '/', search: '?tab=mentorship' });
       return;
     }
     if (n.convId) {
@@ -497,24 +625,6 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                       {Math.min(notifications.length, 9)}
                     </Badge>
                   )}
-                  {pendingReqCount > 0 && (
-                    <Badge
-                      variant="secondary"
-                      className="absolute -bottom-1 -right-1 h-4 min-w-4 rounded-full p-0 flex items-center justify-center text-[10px]"
-                      title={`${pendingReqCount} connection request${pendingReqCount>1?'s':''}`}
-                    >
-                      {Math.min(pendingReqCount, 9)}
-                    </Badge>
-                  )}
-                  {pendingReqCount > 0 && (
-                    <Badge
-                      variant="secondary"
-                      className="absolute -bottom-1 -right-1 h-4 min-w-4 rounded-full p-0 flex items-center justify-center text-[10px]"
-                      title={`${pendingReqCount} connection request${pendingReqCount>1?'s':''}`}
-                    >
-                      {Math.min(pendingReqCount, 9)}
-                    </Badge>
-                  )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
@@ -522,28 +632,6 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                   <div className="p-3 text-sm text-muted-foreground">No new notifications</div>
                 ) : (
                   <div className="max-h-80 overflow-auto">
-                    {incomingRequests.length > 0 && (
-                      <div className="p-2 border-b">
-                        <div className="text-xs font-medium text-muted-foreground mb-1">Incoming Requests</div>
-                        <div className="space-y-2">
-                          {incomingRequests.map((r) => (
-                            <div key={`req_${r.id}`} className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Avatar className="h-6 w-6">
-                                  <AvatarImage src={r.avatar} alt={r.name} />
-                                  <AvatarFallback>{String(r.name || 'U').slice(0,2).toUpperCase()}</AvatarFallback>
-                                </Avatar>
-                                <div className="truncate text-sm">{r.name || 'Someone'}</div>
-                              </div>
-                              <div className="flex gap-1 shrink-0">
-                                <Button size="sm" variant="default" onClick={(e) => { e.stopPropagation(); acceptRequest(r); }}>Accept</Button>
-                                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); declineRequest(r); }}>Decline</Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                     {notifications.map((n) => (
                       <DropdownMenuItem key={n.id} className="flex items-start gap-2">
                         <div className="flex-1 min-w-0" onClick={() => openNotification(n)}>
@@ -610,6 +698,88 @@ export function Header({ currentUser, onMenuToggle }: HeaderProps) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate({ pathname: "/", search: "?tab=messages" })}>
                   Go to Messages
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Connections */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative">
+                  <Users className="h-5 w-5" />
+                  {(acceptedConnections.length > 0 || pendingReqCount > 0) && (
+                    <Badge 
+                      variant="secondary" 
+                      className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs"
+                    >
+                      {Math.min(acceptedConnections.length + pendingReqCount, 9)}
+                    </Badge>
+                  )}
+                  {pendingReqCount > 0 && (
+                    <Badge
+                      variant="destructive"
+                      className="absolute -bottom-1 -right-1 h-4 min-w-4 rounded-full p-0 flex items-center justify-center text-[10px]"
+                      title={`${pendingReqCount} pending request${pendingReqCount>1?'s':''}`}
+                    >
+                      {Math.min(pendingReqCount, 9)}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                {incomingRequests.length > 0 && (
+                  <>
+                    <div className="p-2 border-b">
+                      <div className="text-xs font-medium text-muted-foreground mb-1">Pending Requests</div>
+                      <div className="space-y-2">
+                        {incomingRequests.slice(0, 3).map((r) => (
+                          <div key={`req_${r.id}`} className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Avatar className="h-6 w-6">
+                                <AvatarImage src={r.avatar} alt={r.name} />
+                                <AvatarFallback>{String(r.name || 'U').slice(0,2).toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                              <div className="truncate text-sm">{r.name || 'Someone'}</div>
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                              <Button size="sm" variant="default" onClick={(e) => { e.stopPropagation(); acceptRequest(r); }}>Accept</Button>
+                              <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); declineRequest(r); }}>Decline</Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                {acceptedConnections.length === 0 && incomingRequests.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground">No connections yet</div>
+                ) : (
+                  <>
+                    {acceptedConnections.length > 0 && (
+                      <>
+                        <div className="p-2">
+                          <div className="text-xs font-medium text-muted-foreground mb-1">Your Connections</div>
+                        </div>
+                        {acceptedConnections.slice(0, 4).map((c) => (
+                          <DropdownMenuItem key={c.id} className="flex items-start gap-2" onClick={() => navigate({ pathname: "/profile", search: `?id=${c.id}` })}>
+                            <Avatar className="h-8 w-8 shrink-0">
+                              <AvatarImage src={c.avatar} alt={c.name} />
+                              <AvatarFallback>{String(c.name || 'U').slice(0,2).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{c.name || 'User'}</div>
+                              <div className="text-xs text-muted-foreground">Connected</div>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </>
+                    )}
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate({ pathname: "/", search: "?tab=directory&connections=true" })}>
+                  View all connections
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

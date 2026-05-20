@@ -13,13 +13,14 @@ import { collection, onSnapshot, query, doc, setDoc, deleteDoc } from "firebase/
 import { getAuth, signInAnonymously } from "firebase/auth";
 import { useAuth } from "@/store/auth";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 const mockAlumni: any[] = [];
 
 export function AlumniDirectory() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState({
     year: "all",
@@ -302,6 +303,14 @@ export function AlumniDirectory() {
     return () => unsubProfiles();
   }, []);
 
+  // Check URL parameter for connections filter
+  useEffect(() => {
+    const connectionsParam = searchParams.get('connections');
+    if (connectionsParam === 'true') {
+      setShowConnectionsOnly(true);
+    }
+  }, [searchParams]);
+
   const items = useMemo(() => {
     const pick = (...vals: any[]) => vals.find((v) => v !== undefined && v !== null && String(v).trim() !== "");
     const ensureSkills = (val: any) => Array.isArray(val)
@@ -412,9 +421,13 @@ export function AlumniDirectory() {
     if (!isVisible) return false;
     const rr = String(alumni.rawRole || '').toLowerCase();
     if (rr === 'admin' || rr === 'super_admin' || rr === 'super admin' || rr.includes('admin')) return false;
-    const matchAudience = audience === 'alumni'
-      ? (alumni.roleCategory === 'alumni' && (alumni.source === 'user' || alumni.source === 'profile'))
-      : ((alumni.isCurrentStudent || alumni.roleCategory === 'student') && alumni.source === 'user');
+    
+    // When showing connections only, allow both alumni and students
+    const matchAudience = showConnectionsOnly
+      ? (alumni.source === 'user' || alumni.source === 'profile')
+      : (audience === 'alumni'
+        ? (alumni.roleCategory === 'alumni' && (alumni.source === 'user' || alumni.source === 'profile'))
+        : ((alumni.isCurrentStudent || alumni.roleCategory === 'student') && alumni.source === 'user'));
 
     // Search only by name
     const matchesSearch = (alumni.name || "").toLowerCase().includes(searchQuery.toLowerCase());

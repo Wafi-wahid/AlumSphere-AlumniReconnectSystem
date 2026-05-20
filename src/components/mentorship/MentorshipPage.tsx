@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Calendar, Heart, Star, Clock, Video, MessageCircle, CheckCircle, Building2, Briefcase, X, Info } from "lucide-react";
+import { Search, Calendar, Heart, Star, Clock, Video, MessageCircle, CheckCircle, Building2, Briefcase, X, Info, Linkedin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -205,7 +205,6 @@ export function MentorshipPage() {
   const [requestForm, setRequestForm] = useState({
     topic: "",
     topicCustom: "",
-    sessionType: "",
     outline: "",
     preferredDate: "",
     preferredTime: "",
@@ -235,9 +234,9 @@ export function MentorshipPage() {
       return;
     }
     const topicValue = requestForm.topic === 'other' ? requestForm.topicCustom.trim() : requestForm.topic;
-    const isValid = topicValue && requestForm.sessionType && requestForm.preferredDate && requestForm.preferredTime;
+    const isValid = topicValue && requestForm.preferredDate && requestForm.preferredTime;
     if (!isValid) {
-      toast({ title: "Form incomplete", description: "Please fill all required fields. Even mentors can’t read minds… yet 😄", duration: 4000 });
+      toast({ title: "Form incomplete", description: "Please fill all required fields. Even mentors can't read minds… yet 😄", duration: 4000 });
       return;
     }
     try {
@@ -258,11 +257,8 @@ export function MentorshipPage() {
       } catch {}
 
       const preferredDateTime = new Date(`${requestForm.preferredDate}T${requestForm.preferredTime}:00`).toISOString();
-      const allowedDurations = ['30m','45m','60m'] as const;
-      const isAllowed = (v: string): v is typeof allowedDurations[number] => (allowedDurations as readonly string[]).includes(v);
-      const apiSessionType = isAllowed(requestForm.sessionType) ? requestForm.sessionType : '45m';
-      const extraPref = !isAllowed(requestForm.sessionType) && requestForm.sessionType ? ` [preference: ${requestForm.sessionType}]` : '';
-      const notesCombined = `${requestForm.outline || ''}${extraPref}`.trim();
+      const apiSessionType = '45m'; // Default to individual mentorship
+      const notesCombined = requestForm.outline || '';
       await MentorshipAPI.createRequest({
         mentorId: mentorMongoId,
         topic: topicValue,
@@ -272,7 +268,7 @@ export function MentorshipPage() {
       });
       toast({ title: "Request Sent 🚀", description: "Your mentor will get back to you soon." });
       setShowRequestDialog(false);
-      setRequestForm({ topic: "", topicCustom: "", sessionType: "", outline: "", preferredDate: "", preferredTime: "" });
+      setRequestForm({ topic: "", topicCustom: "", outline: "", preferredDate: "", preferredTime: "" });
     } catch (e: any) {
       toast({ title: "Couldn’t send request", description: e?.message || "Please try again." });
     } finally {
@@ -370,6 +366,8 @@ export function MentorshipPage() {
       const department = co(u.program, u.department, u?.mongo?.program, u?.mongo?.department, p.department, p.program, '');
       const batch = co(u.gradYear, u.batchYear, u.graduationYear, u?.mongo?.gradYear, u?.mongo?.batchYear, u?.mongo?.graduationYear, p.graduationYear, p.gradYear, '');
       const location = co(u.location, u?.mongo?.location, p.location, '');
+      const headline = co(u.headline, u.profileHeadline, u?.mongo?.headline, u?.mongo?.profileHeadline, p.headline, '');
+      const linkedinUrl = co(u.linkedinUrl, u.linkedinId, u?.mongo?.linkedinUrl, u?.mongo?.linkedinId, p.linkedinUrl, p.linkedinId, '');
       const toArr = (val: any): string[] => {
         if (!val && val !== 0) return [];
         if (Array.isArray(val)) return val.map((x) => String(x).trim()).filter(Boolean);
@@ -394,7 +392,7 @@ export function MentorshipPage() {
         .filter(Boolean);
       const dedup = Array.from(new Set(mergedSkills));
       const expertise = dedup.slice(0, 12);
-      list.push({ id, name, avatar, role, company, department, batch: String(batch || ''), location, expertise });
+      list.push({ id, name, avatar, role, company, department, batch: String(batch || ''), location, expertise, headline, linkedinUrl });
     });
 
     // Filter out entries with no basic identity
@@ -567,7 +565,7 @@ export function MentorshipPage() {
                           </Button>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-[#E5E7EB]">
-                          <Briefcase className="h-3 w-3" /> {mentor.role}
+                          {mentor.headline || mentor.role}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-[#E5E7EB]">
                           <Building2 className="h-3 w-3" /> {mentor.company} • Batch {mentor.batch}
@@ -848,6 +846,20 @@ export function MentorshipPage() {
                 </div>
               </div>
               {/* availability removed */}
+              {selectedMentor?.linkedinUrl && (
+                <div className="flex items-center gap-2">
+                  <a
+                    href={selectedMentor.linkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-sm hover:underline"
+                    style={{ color: "#007BFF" }}
+                  >
+                    <Linkedin className="h-4 w-4" />
+                    LinkedIn Profile
+                  </a>
+                </div>
+              )}
             </div>
 
             {/* Sticky footer */}
@@ -917,33 +929,6 @@ export function MentorshipPage() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="stype">Session Type *</Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span aria-label="help" className="inline-flex items-center justify-center h-5 w-5 rounded-full border text-xs cursor-default">
-                      <Info className="h-3.5 w-3.5" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="text-xs">
-                      <div><strong>Individual</strong>: 1-on-1 mentorship, no other participants.</div>
-                      <div><strong>Group</strong>: A batch of students mentored together on one topic.</div>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <Select value={requestForm.sessionType} onValueChange={(value) => setRequestForm(prev => ({ ...prev, sessionType: value }))}>
-                <SelectTrigger id="stype">
-                  <SelectValue placeholder="Choose type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="individual">Individual</SelectItem>
-                  <SelectItem value="group">Group</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
 
             <div className="space-y-2">
               <Label htmlFor="outline">Session Outline *</Label>
@@ -985,7 +970,7 @@ export function MentorshipPage() {
               </Button>
               <Button onClick={handleSubmitRequest} className="flex-1" disabled={
                 submitting ||
-                !(requestForm.sessionType && requestForm.preferredDate && requestForm.preferredTime && (requestForm.topic && (requestForm.topic !== 'other' || requestForm.topicCustom.trim())))
+                !(requestForm.preferredDate && requestForm.preferredTime && (requestForm.topic && (requestForm.topic !== 'other' || requestForm.topicCustom.trim())))
               }>
                 {submitting ? 'Sending…' : 'Send Request'}
               </Button>
